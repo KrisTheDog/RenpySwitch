@@ -423,8 +423,9 @@ Result createSaveData(void)
    App init / exit
 ------------------------------------------------------- */
 
-void userAppInit(void)
+void userAppInit()
 {
+    fsInitialize();
     fsdevMountSdmc();
 
     freopen("sdmc:/renpy_switch.log", "w", stdout);
@@ -434,18 +435,62 @@ void userAppInit(void)
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     printf("=== Ren'Py 8 Switch launcher ===\n");
+    
+    Result rc = 0;
+    PselUserSelectionSettings settings;
+    
+    rc = svcGetInfo(&cur_progid, InfoType_ProgramId, CUR_PROCESS_HANDLE, 0);
+    rc = accountInitialize(AccountServiceType_Application);
+    rc = accountGetPreselectedUser(&userID);
+    
+    if (R_FAILED(rc)) {
+        s32 count;
+        accountGetUserCount(&count);
 
-    svcGetInfo(&cur_progid, InfoType_ProgramId, CUR_PROCESS_HANDLE, 0);
-
-    accountInitialize(AccountServiceType_Application);
-    accountGetPreselectedUser(&userID);
-
-    if (accountUidIsValid(&userID)) {
-        Result rc = fsdevMountSaveData("save", cur_progid, userID);
-        if (R_FAILED(rc)) {
-            createSaveData();
-            fsdevMountSaveData("save", cur_progid, userID);
+        if (count > 1) {
+            // Показываем селектор пользователей
+            rc = pselShowUserSelector(&userID, &settings);
+            
+            // Если пользователь нажал отмену, завершаем программу
+            if (R_FAILED(rc) || !accountUidIsValid(&userID)) {
+                printf("User selection cancelled. Exiting...\n");
+                fflush(stdout);
+                
+                // Даем время для записи лога
+                svcSleepThread(2000000000ULL); // 2 секунды
+                
+                // Завершаем программу
+                exit(0);
+            }
+        } else if (count == 1) {
+            s32 loadedUsers;
+            AccountUid account_ids[1];
+            accountListAllUsers(account_ids, 1, &loadedUsers);
+            if (count > 0) {
+                userID = account_ids[0];
+            }
+        } else {
+            // Нет пользователей - завершаем программу
+            printf("No users found. Exiting...\n");
+            fflush(stdout);
+            svcSleepThread(2000000000ULL);
+            exit(0);
         }
+    }
+
+    // Дополнительная проверка после всех операций
+    if (!accountUidIsValid(&userID)) {
+        printf("Invalid user selected. Exiting...\n");
+        fflush(stdout);
+        svcSleepThread(2000000000ULL);
+        exit(0);
+    }
+
+    // Если пользователь выбран, продолжаем инициализацию
+    rc = fsdevMountSaveData("save", cur_progid, userID);
+    if (R_FAILED(rc)) {
+        rc = createSaveData();
+        rc = fsdevMountSaveData("save", cur_progid, userID);
     }
 
     romfsInit();
@@ -499,6 +544,13 @@ static void on_applet_hook(AppletHookType hook, void *param)
 
 int main(int argc, char* argv[])
 {  
+   	// Проверяем, что пользователь выбран
+    if (!accountUidIsValid(&userID)) {
+        printf("No user selected. Game cannot start.\n");
+        fflush(stdout);
+        svcSleepThread(2000000000ULL); // Даем время для записи в лог
+        return 0;
+    }
 
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
