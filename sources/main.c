@@ -28,17 +28,16 @@ AccountUid userID = {0};
 ------------------------------------------------------- */
 void show_logos(void) {
     // Инициализация SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
         printf("SDL_Init failed: %s\n", SDL_GetError());
         return;
     }
     
-    // Инициализация SDL_image
-    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_GIF;
+    // Инициализация SDL_image только с PNG и JPG
+    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
     if (!(IMG_Init(imgFlags) & imgFlags)) {
         printf("IMG_Init failed: %s\n", IMG_GetError());
-        SDL_Quit();
-        return;
+        // Продолжаем работу, возможно GIF загрузится
     }
     
     // Создание окна
@@ -63,20 +62,35 @@ void show_logos(void) {
     }
     
     // Загрузка логотипов
-    SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
-    SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
-    
     SDL_Texture* nintendo_texture = NULL;
     SDL_Texture* startup_texture = NULL;
     
+    // Пробуем загрузить Nintendo логотип (PNG)
+    SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
     if (nintendo_surface) {
         nintendo_texture = SDL_CreateTextureFromSurface(renderer, nintendo_surface);
         SDL_FreeSurface(nintendo_surface);
+        printf("Nintendo logo loaded successfully\n");
+    } else {
+        printf("Failed to load nintendologo.png: %s\n", IMG_GetError());
     }
     
+    // Пробуем загрузить startupmovie как GIF (без флага IMG_INIT_GIF)
+    // Иногда SDL_image может загрузить GIF даже без этого флага
+    SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
     if (startup_surface) {
         startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
         SDL_FreeSurface(startup_surface);
+        printf("Startup movie loaded successfully as GIF\n");
+    } else {
+        printf("Failed to load startupmovie.gif: %s\n", IMG_GetError());
+        // Попробуем загрузить как PNG на случай, если есть оба файла
+        startup_surface = IMG_Load("romfs:/startupmovie.png");
+        if (startup_surface) {
+            startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
+            SDL_FreeSurface(startup_surface);
+            printf("Startup movie loaded as PNG instead\n");
+        }
     }
     
     // Если хотя бы один логотип загружен, отображаем
@@ -126,6 +140,8 @@ void show_logos(void) {
             SDL_RenderPresent(renderer);
             SDL_Delay(16);  // ~60 FPS
         }
+    } else {
+        printf("No logos were loaded, skipping logo screen\n");
     }
     
     // Очистка ресурсов
