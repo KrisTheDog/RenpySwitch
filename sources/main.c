@@ -197,6 +197,14 @@ void show_logos(void) {
             SDL_RenderPresent(renderer);
             SDL_Delay(16);  // ~60 FPS
         }
+        
+        // === ВАЖНОЕ ДОБАВЛЕНИЕ ===
+        // Очистка экрана перед выходом (чтобы изображения не "зависали")
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+        // =========================
+        
     } else {
         printf("No logos were loaded, skipping logo screen\n");
     }
