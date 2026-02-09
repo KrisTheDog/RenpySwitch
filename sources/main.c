@@ -21,6 +21,123 @@
 u64 cur_progid = 0;
 AccountUid userID = {0};
 
+
+
+/* -------------------------------------------------------
+   Функция для отображения логотипов
+------------------------------------------------------- */
+void show_logos(void) {
+    // Инициализация SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+        printf("SDL_Init failed: %s\n", SDL_GetError());
+        return;
+    }
+    
+    // Инициализация SDL_image
+    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_GIF;
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
+        printf("IMG_Init failed: %s\n", IMG_GetError());
+        SDL_Quit();
+        return;
+    }
+    
+    // Создание окна
+    SDL_Window* window = SDL_CreateWindow("Logo", 0, 0, 1280, 720, 
+                                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
+    if (!window) {
+        printf("Failed to create window: %s\n", SDL_GetError());
+        IMG_Quit();
+        SDL_Quit();
+        return;
+    }
+    
+    // Создание рендерера
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 
+                                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) {
+        printf("Failed to create renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        IMG_Quit();
+        SDL_Quit();
+        return;
+    }
+    
+    // Загрузка логотипов
+    SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
+    SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
+    
+    SDL_Texture* nintendo_texture = NULL;
+    SDL_Texture* startup_texture = NULL;
+    
+    if (nintendo_surface) {
+        nintendo_texture = SDL_CreateTextureFromSurface(renderer, nintendo_surface);
+        SDL_FreeSurface(nintendo_surface);
+    }
+    
+    if (startup_surface) {
+        startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
+        SDL_FreeSurface(startup_surface);
+    }
+    
+    // Если хотя бы один логотип загружен, отображаем
+    if (nintendo_texture || startup_texture) {
+        Uint32 startTime = SDL_GetTicks();
+        bool quit = false;
+        
+        while (!quit) {
+            // Обработка событий
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT ||
+                    event.type == SDL_KEYDOWN ||
+                    event.type == SDL_JOYBUTTONDOWN ||
+                    event.type == SDL_CONTROLLERBUTTONDOWN ||
+                    event.type == SDL_FINGERDOWN ||
+                    event.type == SDL_MOUSEBUTTONDOWN) {
+                    quit = true;
+                }
+            }
+            
+            // Проверка таймаута (3 секунды)
+            if (SDL_GetTicks() - startTime >= 3000) {
+                quit = true;
+            }
+            
+            // Очистка экрана
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            
+            // Отображение логотипов
+            if (nintendo_texture) {
+                int w, h;
+                SDL_QueryTexture(nintendo_texture, NULL, NULL, &w, &h);
+                SDL_Rect dest = {20, 20, w, h};  // Левый верхний угол
+                SDL_RenderCopy(renderer, nintendo_texture, NULL, &dest);
+            }
+            
+            if (startup_texture) {
+                int w, h;
+                SDL_QueryTexture(startup_texture, NULL, NULL, &w, &h);
+                SDL_Rect dest = {1280 - w - 20, 20, w, h};  // Правый верхний угол
+                SDL_RenderCopy(renderer, startup_texture, NULL, &dest);
+            }
+            
+            // Обновление экрана
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);  // ~60 FPS
+        }
+    }
+    
+    // Очистка ресурсов
+    if (nintendo_texture) SDL_DestroyTexture(nintendo_texture);
+    if (startup_texture) SDL_DestroyTexture(startup_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    SDL_Quit();
+}
+
+
 /* -------------------------------------------------------
    _nx module (sleep)
 ------------------------------------------------------- */
@@ -366,6 +483,12 @@ static void on_applet_hook(AppletHookType hook, void *param)
 
 int main(int argc, char* argv[])
 {  
+
+    video_player_init();
+    play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
+    video_player_quit();
+    // Показ логотипов при запуске
+    show_logos();
     // printf("=== Testing video playback ===\n");
     
     // // Инициализируем видео-плеер
