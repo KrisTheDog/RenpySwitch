@@ -27,11 +27,15 @@ AccountUid userID = {0};
    Функция для отображения логотипов
 ------------------------------------------------------- */
 void show_logos(void) {
-    // Инициализация SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
+    // Инициализация SDL с поддержкой джойстика
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK) < 0) {
         printf("SDL_Init failed: %s\n", SDL_GetError());
         return;
     }
+    
+    // Инициализация контроллера Switch
+    SDL_JoystickEventState(SDL_ENABLE);
+    SDL_JoystickOpen(0);
     
     // Инициализация SDL_image только с PNG и JPG
     int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
@@ -76,7 +80,6 @@ void show_logos(void) {
     }
     
     // Пробуем загрузить startupmovie как GIF (без флага IMG_INIT_GIF)
-    // Иногда SDL_image может загрузить GIF даже без этого флага
     SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
     if (startup_surface) {
         startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
@@ -99,16 +102,62 @@ void show_logos(void) {
         bool quit = false;
         
         while (!quit) {
-            // Обработка событий
+            // Обработка событий с улучшенной поддержкой Switch контроллера
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT ||
-                    event.type == SDL_KEYDOWN ||
-                    event.type == SDL_JOYBUTTONDOWN ||
-                    event.type == SDL_CONTROLLERBUTTONDOWN ||
-                    event.type == SDL_FINGERDOWN ||
-                    event.type == SDL_MOUSEBUTTONDOWN) {
-                    quit = true;
+                switch (event.type) {
+                    case SDL_QUIT:
+                        quit = true;
+                        break;
+                        
+                    case SDL_KEYDOWN:
+                        // Любая клавиша клавиатуры
+                        printf("Key pressed: %d\n", event.key.keysym.sym);
+                        quit = true;
+                        break;
+                        
+                    case SDL_JOYBUTTONDOWN:
+                        // Любая кнопка джойстика
+                        printf("Joystick button pressed: %d\n", event.jbutton.button);
+                        quit = true;
+                        break;
+                        
+                    case SDL_JOYHATMOTION:
+                        // Нажатие на D-pad
+                        if (event.jhat.value != 0) {
+                            printf("Joystick hat motion: %d\n", event.jhat.value);
+                            quit = true;
+                        }
+                        break;
+                        
+                    case SDL_JOYAXISMOTION:
+                        // Движение стиков (обрабатываем как нажатие, если значение большое)
+                        if (abs(event.jaxis.value) > 16000) {
+                            printf("Joystick axis motion: %d\n", event.jaxis.axis);
+                            quit = true;
+                        }
+                        break;
+                        
+                    case SDL_CONTROLLERBUTTONDOWN:
+                        // Кнопка контроллера
+                        printf("Controller button pressed: %d\n", event.cbutton.button);
+                        quit = true;
+                        break;
+                        
+                    case SDL_FINGERDOWN:
+                        // Касание тачскрина
+                        printf("Touch input detected\n");
+                        quit = true;
+                        break;
+                        
+                    case SDL_MOUSEBUTTONDOWN:
+                        // Нажатие кнопки мыши
+                        printf("Mouse button pressed\n");
+                        quit = true;
+                        break;
+                        
+                    default:
+                        break;
                 }
             }
             
@@ -121,18 +170,26 @@ void show_logos(void) {
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
             
-            // Отображение логотипов
+            // Ключевое изменение для док-режима:
+            // Получаем текущие размеры окна (работает для любого разрешения)
+            int windowWidth, windowHeight;
+            SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+            
+            // Отображение логотипов с динамическим расчетом позиций
             if (nintendo_texture) {
                 int w, h;
                 SDL_QueryTexture(nintendo_texture, NULL, NULL, &w, &h);
-                SDL_Rect dest = {20, 20, w, h};  // Левый верхний угол
+                // Левый верхний угол (фиксированный отступ 20px)
+                SDL_Rect dest = {20, 20, w, h};
                 SDL_RenderCopy(renderer, nintendo_texture, NULL, &dest);
             }
             
             if (startup_texture) {
                 int w, h;
                 SDL_QueryTexture(startup_texture, NULL, NULL, &w, &h);
-                SDL_Rect dest = {1280 - w - 20, 20, w, h};  // Правый верхний угол
+                // Правый нижний угол: 
+                // Рассчитываем позицию от правого и нижнего края окна
+                SDL_Rect dest = {windowWidth - w - 20, windowHeight - h - 20, w, h};
                 SDL_RenderCopy(renderer, startup_texture, NULL, &dest);
             }
             
@@ -152,7 +209,6 @@ void show_logos(void) {
     IMG_Quit();
     SDL_Quit();
 }
-
 
 /* -------------------------------------------------------
    _nx module (sleep)
