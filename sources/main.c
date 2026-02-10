@@ -23,6 +23,178 @@ AccountUid userID = {0};
 
 
 /* -------------------------------------------------------
+   Function to display logos
+------------------------------------------------------- */
+void show_logos(void)
+{
+    printf("=== Showing logos ===\n");
+    
+    // Initialize SDL for logos
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
+        printf("SDL_Init failed for logos: %s\n", SDL_GetError());
+        return;
+    }
+    
+    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP) & (IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP))) {
+        printf("IMG_Init failed: %s\n", IMG_GetError());
+        SDL_Quit();
+        return;
+    }
+    
+    // Create window and renderer
+    SDL_Window* window = SDL_CreateWindow("Logos", 
+                                          SDL_WINDOWPOS_CENTERED, 
+                                          SDL_WINDOWPOS_CENTERED, 
+                                          1280, 720, 
+                                          SDL_WINDOW_FULLSCREEN);
+    
+    if (!window) {
+        printf("SDL_CreateWindow failed: %s\n", SDL_GetError());
+        IMG_Quit();
+        SDL_Quit();
+        return;
+    }
+    
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 
+                                                SDL_RENDERER_ACCELERATED | 
+                                                SDL_RENDERER_PRESENTVSYNC);
+    
+    if (!renderer) {
+        printf("SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        IMG_Quit();
+        SDL_Quit();
+        return;
+    }
+    
+    // Load logos
+    SDL_Texture* logo1 = NULL;
+    SDL_Texture* logo2 = NULL;
+    
+    // Try multiple possible paths
+    const char* possible_paths1[] = {
+        "romfs:/nintendologo.png"
+    };
+    
+    const char* possible_paths2[] = {
+        "romfs:/startupmovie.gif"
+    };
+    
+    // Load first logo
+    for (int i = 0; i < 4; i++) {
+        logo1 = IMG_LoadTexture(renderer, possible_paths1[i]);
+        if (logo1) {
+            printf("Loaded logo1 from: %s\n", possible_paths1[i]);
+            break;
+        }
+    }
+    
+    // Load second logo (GIF) - IMG_LoadTexture should handle GIFs
+    for (int i = 0; i < 4; i++) {
+        logo2 = IMG_LoadTexture(renderer, possible_paths2[i]);
+        if (logo2) {
+            printf("Loaded logo2 from: %s\n", possible_paths2[i]);
+            break;
+        }
+    }
+    
+    if (!logo1 && !logo2) {
+        printf("Failed to load logos\n");
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        IMG_Quit();
+        SDL_Quit();
+        return;
+    }
+    
+    // Get display/window dimensions
+    int display_width, display_height;
+    SDL_GetWindowSize(window, &display_width, &display_height);
+    printf("Display dimensions: %d x %d\n", display_width, display_height);
+    
+    // Get logo dimensions
+    int logo1_width = 0, logo1_height = 0;
+    int logo2_width = 0, logo2_height = 0;
+    
+    if (logo1) {
+        SDL_QueryTexture(logo1, NULL, NULL, &logo1_width, &logo1_height);
+        printf("Logo1 dimensions: %d x %d\n", logo1_width, logo1_height);
+    }
+    
+    if (logo2) {
+        SDL_QueryTexture(logo2, NULL, NULL, &logo2_width, &logo2_height);
+        printf("Logo2 dimensions: %d x %d\n", logo2_width, logo2_height);
+    }
+    
+    // Calculate positions (top-left and bottom-right corners)
+    SDL_Rect logo1_rect = {0, 0, logo1_width, logo1_height}; // Top-left
+    
+    SDL_Rect logo2_rect = {
+        display_width - logo2_width,  // Right edge minus logo width
+        display_height - logo2_height, // Bottom edge minus logo height
+        logo2_width,
+        logo2_height
+    };
+    
+    // Main loop for logos
+    Uint32 start_time = SDL_GetTicks();
+    bool running = true;
+    
+    while (running) {
+        SDL_Event event;
+        
+        // Check for button presses
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+            // Check for any button press
+            if (event.type == SDL_JOYBUTTONDOWN || 
+                event.type == SDL_KEYDOWN ||
+                event.type == SDL_CONTROLLERBUTTONDOWN) {
+                running = false;
+            }
+        }
+        
+        // Check for timeout (3 seconds)
+        if (SDL_GetTicks() - start_time > 3000) {
+            running = false;
+        }
+        
+        // Clear screen
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        
+        // Draw logos
+        if (logo1) {
+            SDL_RenderCopy(renderer, logo1, NULL, &logo1_rect);
+        }
+        
+        if (logo2) {
+            SDL_RenderCopy(renderer, logo2, NULL, &logo2_rect);
+        }
+        
+        // Update screen
+        SDL_RenderPresent(renderer);
+        
+        // Small delay to prevent high CPU usage
+        SDL_Delay(16); // ~60 FPS
+    }
+    
+    printf("Logos displayed for %u ms\n", SDL_GetTicks() - start_time);
+    
+    // Cleanup
+    if (logo1) SDL_DestroyTexture(logo1);
+    if (logo2) SDL_DestroyTexture(logo2);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    SDL_Quit();
+    
+    printf("=== Logos finished ===\n");
+}
+
+/* -------------------------------------------------------
    _nx module (sleep)
 ------------------------------------------------------- */
 
@@ -422,12 +594,12 @@ int main(int argc, char* argv[])
 
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
-
+    video_player_quit();
    
     // Показ логотипов при запуске
     show_logos();
-   
 
+    video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
     video_player_quit();
     // printf("=== Testing video playback ===\n");
