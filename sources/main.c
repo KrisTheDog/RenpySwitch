@@ -39,6 +39,16 @@ void show_logos(void)
         return;
     }
     
+    // Открываем все доступные контроллеры
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (SDL_IsGameController(i)) {
+            SDL_GameController* controller = SDL_GameControllerOpen(i);
+            if (controller) {
+                printf("Opened controller %d: %s\n", i, SDL_GameControllerName(controller));
+            }
+        }
+    }
+    
     // Создаем окно и рендерер для логотипов
     SDL_Window* logo_window = SDL_CreateWindow("Logos", 
                                           SDL_WINDOWPOS_CENTERED, 
@@ -102,6 +112,16 @@ void show_logos(void)
         }
     }
     
+    // Если нет логотипов, выходим
+    if (!logo1 && !logo2) {
+        printf("No logos found, continuing without them\n");
+        SDL_DestroyRenderer(logo_renderer);
+        SDL_DestroyWindow(logo_window);
+        IMG_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
+        return;
+    }
+    
     // Получаем размеры экрана
     int display_width, display_height;
     SDL_GetWindowSize(logo_window, &display_width, &display_height);
@@ -134,28 +154,70 @@ void show_logos(void)
     // Основной цикл отображения логотипов
     Uint32 start_time = SDL_GetTicks();
     bool running = true;
+    bool skip_requested = false;
     
     while (running) {
         SDL_Event event;
         
         // Проверяем события
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
-            }
-            // Любая кнопка или клавиша завершает показ
-            if (event.type == SDL_JOYBUTTONDOWN || 
-                event.type == SDL_KEYDOWN ||
-                event.type == SDL_CONTROLLERBUTTONDOWN) {
-                printf("Button pressed, exiting logos\n");
-                running = false;
+            switch (event.type) {
+                case SDL_QUIT:
+                    running = false;
+                    skip_requested = true;
+                    break;
+                    
+                case SDL_KEYDOWN:
+                    printf("Key pressed: %s\n", SDL_GetKeyName(event.key.keysym.sym));
+                    running = false;
+                    skip_requested = true;
+                    break;
+                    
+                case SDL_JOYBUTTONDOWN:
+                    printf("Joystick button pressed: joystick=%d, button=%d\n", 
+                           event.jbutton.which, event.jbutton.button);
+                    running = false;
+                    skip_requested = true;
+                    break;
+                    
+                case SDL_CONTROLLERBUTTONDOWN:
+                    printf("Controller button pressed: controller=%d, button=%d\n", 
+                           event.cbutton.which, event.cbutton.button);
+                    running = false;
+                    skip_requested = true;
+                    break;
+                    
+                case SDL_JOYDEVICEADDED:
+                    if (SDL_IsGameController(event.jdevice.which)) {
+                        SDL_GameController* controller = SDL_GameControllerOpen(event.jdevice.which);
+                        if (controller) {
+                            printf("Controller connected: %s\n", SDL_GameControllerName(controller));
+                        }
+                    }
+                    break;
+                    
+                case SDL_JOYDEVICEREMOVED:
+                    printf("Controller disconnected\n");
+                    break;
             }
         }
         
         // Проверяем таймаут (3 секунды)
-        if (SDL_GetTicks() - start_time > 3000) {
+        if (!skip_requested && SDL_GetTicks() - start_time > 3000) {
             printf("3 seconds elapsed, exiting logos\n");
             running = false;
+        }
+        
+        // Если запрошен пропуск, показываем черный экран и выходим
+        if (skip_requested) {
+            // Очищаем экран черным
+            SDL_SetRenderDrawColor(logo_renderer, 0, 0, 0, 255);
+            SDL_RenderClear(logo_renderer);
+            SDL_RenderPresent(logo_renderer);
+            
+            // Короткая задержка для отображения черного экрана
+            SDL_Delay(50);
+            break;
         }
         
         // Очищаем экран
@@ -180,13 +242,20 @@ void show_logos(void)
     
     printf("Logos displayed for %u ms\n", SDL_GetTicks() - start_time);
     
-    // Очищаем ресурсы логотипов, но НЕ завершаем SDL полностью!
+    // Очищаем ресурсы логотипов
     if (logo1) SDL_DestroyTexture(logo1);
     if (logo2) SDL_DestroyTexture(logo2);
     
     // Уничтожаем рендерер и окно логотипов
     SDL_DestroyRenderer(logo_renderer);
     SDL_DestroyWindow(logo_window);
+    
+    // Закрываем все контроллеры
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (SDL_IsGameController(i)) {
+            SDL_GameControllerClose(SDL_GameControllerFromInstanceID(i));
+        }
+    }
     
     // Завершаем только SDL_image
     IMG_Quit();
@@ -200,7 +269,6 @@ void show_logos(void)
     
     printf("=== Logos finished ===\n");
 }
-
 /* -------------------------------------------------------
    _nx module (sleep)
 ------------------------------------------------------- */
@@ -605,10 +673,6 @@ int main(int argc, char* argv[])
    
     // Показ логотипов при запуске
     show_logos();
-   
-    // Пауза между логотипами и вторым видео
-    printf("Pausing between logos and second video...\n");
-    svcSleepThread(100000000ULL); // 100ms
    
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
