@@ -80,26 +80,6 @@ void video_player_init()
         return;
     }
     sdl_audio_initialized = true;
-    
-																					  
-												
-						  
-																 
-		
-																				 
-							 
-													   
-														   
-													  
-		 
-		
-											
-											   
-							
-																  
-										 
-		 
-	 
 	
     // Не инициализируем видео здесь - это сделает Ren'Py
     sdl_initialized = true;
@@ -1127,3 +1107,4 @@ void play_video_file(const char *path, int skip_enabled)
 {
     play_video_file_delay(path, skip_enabled, DEFAULT_DELAY_SECONDS);
 }
+
