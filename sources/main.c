@@ -26,219 +26,177 @@ void show_logos(void)
 {
     printf("=== Showing logos ===\n");
     
-    // Временные переменные для хранения наших ресурсов
-    SDL_Window* temp_window = NULL;
-    SDL_Renderer* temp_renderer = NULL;
-    SDL_Texture* logo1 = NULL;
-    SDL_Texture* logo2 = NULL;
-    SDL_GameController* temp_controller = NULL;
-    
-    // Флаги, чтобы знать, что мы инициализировали
-    bool sdl_video_inited = false;
-    bool sdl_joystick_inited = false;
-    bool sdl_controller_inited = false;
-    bool img_inited = false;
-    
-    // Проверяем, что SDL видео не инициализирован (мы не хотим мешать существующей инициализации)
-    if (!SDL_WasInit(SDL_INIT_VIDEO)) {
-        printf("Initializing SDL video subsystem for logos\n");
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
-            printf("SDL_InitSubSystem video failed: %s\n", SDL_GetError());
-            return;
-        }
-        sdl_video_inited = true;
+    // Инициализируем только то, что нужно для логотипов
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
+        printf("SDL_InitSubSystem failed for logos: %s\n", SDL_GetError());
+        return;
     }
     
-    // Инициализируем джойстик и контроллер только если нужно
-    if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
-        if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) < 0) {
-            printf("SDL_InitSubSystem joystick failed: %s\n", SDL_GetError());
-            // Продолжаем без джойстика
-        } else {
-            sdl_joystick_inited = true;
-        }
-    }
-    
-    if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER)) {
-        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0) {
-            printf("SDL_InitSubSystem controller failed: %s\n", SDL_GetError());
-            // Продолжаем без контроллера
-        } else {
-            sdl_controller_inited = true;
-        }
-    }
-    
-    // Инициализируем IMG
-    int img_flags = IMG_INIT_PNG | IMG_INIT_JPG;
-    int img_initted = IMG_Init(img_flags);
-    if ((img_initted & img_flags) != img_flags) {
+    int img_flags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP;
+    if (!(IMG_Init(img_flags) & img_flags)) {
         printf("IMG_Init failed: %s\n", IMG_GetError());
-        // Продолжаем, может быть одна из библиотек загрузилась
-    } else {
-        img_inited = true;
+        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
+        return;
     }
     
-    // Создаем временное окно
-    temp_window = SDL_CreateWindow("Logos", 
-                                   SDL_WINDOWPOS_CENTERED, 
-                                   SDL_WINDOWPOS_CENTERED, 
-                                   1280, 720, 
-                                   SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
+    // Создаем окно и рендерер для логотипов
+    SDL_Window* logo_window = SDL_CreateWindow("Logos", 
+                                          SDL_WINDOWPOS_CENTERED, 
+                                          SDL_WINDOWPOS_CENTERED, 
+                                          1280, 720, 
+                                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
     
-    if (!temp_window) {
+    if (!logo_window) {
         printf("SDL_CreateWindow failed: %s\n", SDL_GetError());
-        goto cleanup;
+        IMG_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
+        return;
     }
     
-    temp_renderer = SDL_CreateRenderer(temp_window, -1, 
-                                       SDL_RENDERER_ACCELERATED | 
-                                       SDL_RENDERER_PRESENTVSYNC);
+    SDL_Renderer* logo_renderer = SDL_CreateRenderer(logo_window, -1, 
+                                                SDL_RENDERER_ACCELERATED | 
+                                                SDL_RENDERER_PRESENTVSYNC);
     
-    if (!temp_renderer) {
+    if (!logo_renderer) {
         printf("SDL_CreateRenderer failed: %s\n", SDL_GetError());
-        goto cleanup;
-    }
-    
-    // Открываем контроллер, если есть
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (SDL_IsGameController(i)) {
-            temp_controller = SDL_GameControllerOpen(i);
-            if (temp_controller) {
-                printf("Controller %i opened for logos\n", i);
-                break;
-            }
-        }
+        SDL_DestroyWindow(logo_window);
+        IMG_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
+        return;
     }
     
     // Загружаем логотипы
-    const char* logo_paths[] = {
+    SDL_Texture* logo1 = NULL;
+    SDL_Texture* logo2 = NULL;
+    
+    // Пробуем разные пути для логотипов
+    const char* possible_paths1[] = {
         "romfs:/nintendologo.png",
         "romfs:/Contents/nintendologo.png",
         "sdmc:/nintendologo.png",
-        "nintendologo.png",
-        NULL
+        "nintendologo.png"
     };
     
-    for (int i = 0; logo_paths[i]; i++) {
-        logo1 = IMG_LoadTexture(temp_renderer, logo_paths[i]);
-        if (logo1) {
-            printf("Loaded logo1 from: %s\n", logo_paths[i]);
-            break;
-        }
-    }
-    
-    const char* logo2_paths[] = {
+    const char* possible_paths2[] = {
         "romfs:/startupmovie.gif",
         "romfs:/Contents/startupmovie.gif", 
         "sdmc:/startupmovie.gif",
-        "startupmovie.gif",
-        NULL
+        "startupmovie.gif"
     };
     
-    for (int i = 0; logo2_paths[i]; i++) {
-        logo2 = IMG_LoadTexture(temp_renderer, logo2_paths[i]);
-        if (logo2) {
-            printf("Loaded logo2 from: %s\n", logo2_paths[i]);
+    // Загружаем первый логотип
+    for (int i = 0; i < 4; i++) {
+        logo1 = IMG_LoadTexture(logo_renderer, possible_paths1[i]);
+        if (logo1) {
+            printf("Loaded logo1 from: %s\n", possible_paths1[i]);
             break;
         }
     }
     
-    if (!logo1 && !logo2) {
-        printf("No logos found, skipping\n");
-        goto cleanup;
+    // Загружаем второй логотип
+    for (int i = 0; i < 4; i++) {
+        logo2 = IMG_LoadTexture(logo_renderer, possible_paths2[i]);
+        if (logo2) {
+            printf("Loaded logo2 from: %s\n", possible_paths2[i]);
+            break;
+        }
     }
     
-    // Получаем размеры
-    int win_width, win_height;
-    SDL_GetWindowSize(temp_window, &win_width, &win_height);
+    // Получаем размеры экрана
+    int display_width, display_height;
+    SDL_GetWindowSize(logo_window, &display_width, &display_height);
+    printf("Display dimensions: %d x %d\n", display_width, display_height);
     
-    int logo1_w = 0, logo1_h = 0;
-    int logo2_w = 0, logo2_h = 0;
+    // Получаем размеры логотипов
+    int logo1_width = 0, logo1_height = 0;
+    int logo2_width = 0, logo2_height = 0;
     
-    if (logo1) SDL_QueryTexture(logo1, NULL, NULL, &logo1_w, &logo1_h);
-    if (logo2) SDL_QueryTexture(logo2, NULL, NULL, &logo2_w, &logo2_h);
+    if (logo1) {
+        SDL_QueryTexture(logo1, NULL, NULL, &logo1_width, &logo1_height);
+        printf("Logo1 dimensions: %d x %d\n", logo1_width, logo1_height);
+    }
     
-    // Рассчитываем позиции
-    SDL_Rect logo1_rect = {0, 0, logo1_w, logo1_h};
+    if (logo2) {
+        SDL_QueryTexture(logo2, NULL, NULL, &logo2_width, &logo2_height);
+        printf("Logo2 dimensions: %d x %d\n", logo2_width, logo2_height);
+    }
+    
+    // Позиции логотипов
+    SDL_Rect logo1_rect = {0, 0, logo1_width, logo1_height}; // Левый верхний угол
+    
     SDL_Rect logo2_rect = {
-        win_width - logo2_w,
-        win_height - logo2_h,
-        logo2_w,
-        logo2_h
+        display_width - logo2_width,    // Правый край
+        display_height - logo2_height,  // Нижний край
+        logo2_width,
+        logo2_height
     };
     
-    // Главный цикл
+    // Основной цикл отображения логотипов
     Uint32 start_time = SDL_GetTicks();
     bool running = true;
     
     while (running) {
         SDL_Event event;
         
+        // Проверяем события
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT ||
-                event.type == SDL_JOYBUTTONDOWN ||
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+            // Любая кнопка или клавиша завершает показ
+            if (event.type == SDL_JOYBUTTONDOWN || 
                 event.type == SDL_KEYDOWN ||
                 event.type == SDL_CONTROLLERBUTTONDOWN) {
-                printf("Input detected, ending logos\n");
+                printf("Button pressed, exiting logos\n");
                 running = false;
             }
         }
         
+        // Проверяем таймаут (3 секунды)
         if (SDL_GetTicks() - start_time > 3000) {
-            printf("Timeout reached, ending logos\n");
+            printf("3 seconds elapsed, exiting logos\n");
             running = false;
         }
         
-        // Очистка и отрисовка
-        SDL_SetRenderDrawColor(temp_renderer, 0, 0, 0, 255);
-        SDL_RenderClear(temp_renderer);
+        // Очищаем экран
+        SDL_SetRenderDrawColor(logo_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(logo_renderer);
         
-        if (logo1) SDL_RenderCopy(temp_renderer, logo1, NULL, &logo1_rect);
-        if (logo2) SDL_RenderCopy(temp_renderer, logo2, NULL, &logo2_rect);
+        // Рисуем логотипы
+        if (logo1) {
+            SDL_RenderCopy(logo_renderer, logo1, NULL, &logo1_rect);
+        }
         
-        SDL_RenderPresent(temp_renderer);
-        SDL_Delay(10);
+        if (logo2) {
+            SDL_RenderCopy(logo_renderer, logo2, NULL, &logo2_rect);
+        }
+        
+        // Обновляем экран
+        SDL_RenderPresent(logo_renderer);
+        
+        // Небольшая задержка для экономии CPU
+        SDL_Delay(16);
     }
     
     printf("Logos displayed for %u ms\n", SDL_GetTicks() - start_time);
-
-cleanup:
-    // Очистка только наших ресурсов
-    if (logo1) {
-        SDL_DestroyTexture(logo1);
-        logo1 = NULL;
-    }
-    if (logo2) {
-        SDL_DestroyTexture(logo2);
-        logo2 = NULL;
-    }
     
-    if (temp_renderer) {
-        SDL_DestroyRenderer(temp_renderer);
-        temp_renderer = NULL;
-    }
+    // Очищаем ресурсы логотипов, но НЕ завершаем SDL полностью!
+    if (logo1) SDL_DestroyTexture(logo1);
+    if (logo2) SDL_DestroyTexture(logo2);
     
-    if (temp_window) {
-        SDL_DestroyWindow(temp_window);
-        temp_window = NULL;
-    }
+    // Уничтожаем рендерер и окно логотипов
+    SDL_DestroyRenderer(logo_renderer);
+    SDL_DestroyWindow(logo_window);
     
-    if (temp_controller) {
-        SDL_GameControllerClose(temp_controller);
-        temp_controller = NULL;
-    }
+    // Завершаем только SDL_image
+    IMG_Quit();
     
-    // Важно: НЕ вызываем SDL_Quit() или SDL_QuitSubSystem()
-    // Оставляем подсистемы активными для video_player
+    // Завершаем подсистемы, которые мы инициализировали
+    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
     
-    // Только освобождаем IMG, если мы её инициализировали
-    if (img_inited) {
-        IMG_Quit();
-    }
-    
-    // Пауза для гарантированного освобождения ресурсов
-    printf("Waiting for SDL resources to release...\n");
-    svcSleepThread(500000000ULL); // 0.5 секунды
+    // Важно: небольшая пауза для очистки
+    printf("Pausing to let SDL clean up...\n");
+    svcSleepThread(100000000ULL); // 100ms пауза
     
     printf("=== Logos finished ===\n");
 }
@@ -647,7 +605,11 @@ int main(int argc, char* argv[])
    
     // Показ логотипов при запуске
     show_logos();
-
+   
+    // Пауза между логотипами и вторым видео
+    printf("Pausing between logos and second video...\n");
+    svcSleepThread(100000000ULL); // 100ms
+   
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
     video_player_quit();
