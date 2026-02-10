@@ -621,6 +621,10 @@ int main(int argc, char* argv[])
     video_player_quit();
     // Показ логотипов при запуске
     show_logos();
+
+    video_player_init();
+    play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
+    video_player_quit();
     // printf("=== Testing video playback ===\n");
     
     // // Инициализируем видео-плеер
