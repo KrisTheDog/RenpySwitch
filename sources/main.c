@@ -22,154 +22,6 @@ u64 cur_progid = 0;
 AccountUid userID = {0};
 
 
-
-/* -------------------------------------------------------
-   Функция для отображения логотипов
-------------------------------------------------------- */
-void show_logos(void) {
-    // Инициализация SDL только для отображения логотипов
-    // Не инициализируем аудио, чтобы не конфликтовать с видеоплеером
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) {
-        printf("[Logos] SDL_Init failed: %s\n", SDL_GetError());
-        return;
-    }
-    
-    // Инициализация контроллера Switch напрямую через libnx
-    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
-    PadState pad;
-    padInitializeDefault(&pad);
-    
-    // Инициализация SDL_image
-    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
-    if (!(IMG_Init(imgFlags) & imgFlags)) {
-        printf("[Logos] IMG_Init failed: %s\n", IMG_GetError());
-        SDL_Quit();
-        return;
-    }
-    
-    // Создание окна
-    SDL_Window* window = SDL_CreateWindow("Logo", 0, 0, 1280, 720, 
-                                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
-    if (!window) {
-        printf("[Logos] Failed to create window: %s\n", SDL_GetError());
-        IMG_Quit();
-        SDL_Quit();
-        return;
-    }
-    
-    // Создание рендерера
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 
-                                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        printf("[Logos] Failed to create renderer: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        IMG_Quit();
-        SDL_Quit();
-        return;
-    }
-    
-    // Загрузка логотипов
-    SDL_Texture* nintendo_texture = NULL;
-    SDL_Texture* startup_texture = NULL;
-    
-    // Пробуем загрузить Nintendo логотип (PNG)
-    SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
-    if (nintendo_surface) {
-        nintendo_texture = SDL_CreateTextureFromSurface(renderer, nintendo_surface);
-        SDL_FreeSurface(nintendo_surface);
-        printf("[Logos] Nintendo logo loaded successfully\n");
-    } else {
-        printf("[Logos] Failed to load nintendologo.png: %s\n", IMG_GetError());
-    }
-    
-    // Пробуем загрузить startupmovie как GIF
-    SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
-    if (startup_surface) {
-        startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
-        SDL_FreeSurface(startup_surface);
-        printf("[Logos] Startup movie loaded successfully as GIF\n");
-    } else {
-        printf("[Logos] Failed to load startupmovie.gif: %s\n", IMG_GetError());
-        // Попробуем загрузить как PNG на случай, если есть оба файла
-        startup_surface = IMG_Load("romfs:/startupmovie.png");
-        if (startup_surface) {
-            startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
-            SDL_FreeSurface(startup_surface);
-            printf("[Logos] Startup movie loaded as PNG instead\n");
-        }
-    }
-    
-    // Если хотя бы один логотип загружен, отображаем
-    if (nintendo_texture || startup_texture) {
-        Uint32 startTime = SDL_GetTicks();
-        bool quit = false;
-        
-        while (!quit) {
-            // Проверка кнопок Switch через PadState (как в видеоплеере)
-            padUpdate(&pad);
-            u64 kHeld = padGetButtons(&pad);
-            
-            // Любая кнопка пропускает
-            if (kHeld) {
-                printf("[Logos] Button pressed (0x%lx), skipping logos\n", kHeld);
-                quit = true;
-            }
-            
-            // Проверка таймаута (3 секунды)
-            if (SDL_GetTicks() - startTime >= 3000) {
-                quit = true;
-            }
-            
-            // Очистка экрана
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
-            
-            // Получаем текущие размеры окна для док-режима
-            int windowWidth, windowHeight;
-            SDL_GetWindowSize(window, &windowWidth, &windowHeight);
-            
-            // Отображение логотипов с динамическим расчетом позиций
-            if (nintendo_texture) {
-                int w, h;
-                SDL_QueryTexture(nintendo_texture, NULL, NULL, &w, &h);
-                SDL_Rect dest = {20, 20, w, h};  // Левый верхний угол
-                SDL_RenderCopy(renderer, nintendo_texture, NULL, &dest);
-            }
-            
-            if (startup_texture) {
-                int w, h;
-                SDL_QueryTexture(startup_texture, NULL, NULL, &w, &h);
-                SDL_Rect dest = {windowWidth - w - 20, windowHeight - h - 20, w, h};  // Правый нижний угол
-                SDL_RenderCopy(renderer, startup_texture, NULL, &dest);
-            }
-            
-            // Обновление экрана
-            SDL_RenderPresent(renderer);
-            SDL_Delay(16);  // ~60 FPS
-        }
-        
-        // Очистка экрана перед выходом
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        SDL_RenderPresent(renderer);
-        
-        printf("[Logos] Logos screen finished\n");
-    } else {
-        printf("[Logos] No logos were loaded, skipping logo screen\n");
-    }
-    
-    // Освобождаем ресурсы
-    if (nintendo_texture) SDL_DestroyTexture(nintendo_texture);
-    if (startup_texture) SDL_DestroyTexture(startup_texture);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    IMG_Quit();
-    
-    // Важно: НЕ вызываем SDL_Quit() здесь, так как это закроет аудио подсистему,
-    // которую использует видеоплеер. Вместо этого закрываем только подсистемы, которые мы инициализировали.
-    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
-}
-
 /* -------------------------------------------------------
    _nx module (sleep)
 ------------------------------------------------------- */
@@ -570,12 +422,12 @@ int main(int argc, char* argv[])
 
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
-    video_player_quit();
+
    
     // Показ логотипов при запуске
     show_logos();
    
-    video_player_init();
+
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
     video_player_quit();
     // printf("=== Testing video playback ===\n");
