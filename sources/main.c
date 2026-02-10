@@ -22,23 +22,33 @@ u64 cur_progid = 0;
 AccountUid userID = {0};
 
 
-/* -------------------------------------------------------
-   Function to display logos
-------------------------------------------------------- */
 void show_logos(void)
 {
     printf("=== Showing logos ===\n");
     
     // Initialize SDL for logos
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
         printf("SDL_Init failed for logos: %s\n", SDL_GetError());
         return;
     }
     
-    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP) & (IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP))) {
+    int img_flags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP;
+    if (!(IMG_Init(img_flags) & img_flags)) {
         printf("IMG_Init failed: %s\n", IMG_GetError());
         SDL_Quit();
         return;
+    }
+    
+    // Initialize controllers
+    SDL_GameController *controller = NULL;
+    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+        if (SDL_IsGameController(i)) {
+            controller = SDL_GameControllerOpen(i);
+            if (controller) {
+                printf("Controller %i opened\n", i);
+                break;
+            }
+        }
     }
     
     // Create window and renderer
@@ -46,10 +56,11 @@ void show_logos(void)
                                           SDL_WINDOWPOS_CENTERED, 
                                           SDL_WINDOWPOS_CENTERED, 
                                           1280, 720, 
-                                          SDL_WINDOW_FULLSCREEN);
+                                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
     
     if (!window) {
         printf("SDL_CreateWindow failed: %s\n", SDL_GetError());
+        if (controller) SDL_GameControllerClose(controller);
         IMG_Quit();
         SDL_Quit();
         return;
@@ -62,10 +73,14 @@ void show_logos(void)
     if (!renderer) {
         printf("SDL_CreateRenderer failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
+        if (controller) SDL_GameControllerClose(controller);
         IMG_Quit();
         SDL_Quit();
         return;
     }
+    
+    // Set renderer properties
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     
     // Load logos
     SDL_Texture* logo1 = NULL;
@@ -73,11 +88,17 @@ void show_logos(void)
     
     // Try multiple possible paths
     const char* possible_paths1[] = {
-        "romfs:/nintendologo.png"
+        "romfs:/nintendologo.png",
+        "romfs:/Contents/nintendologo.png",
+        "sdmc:/nintendologo.png",
+        "nintendologo.png"
     };
     
     const char* possible_paths2[] = {
-        "romfs:/startupmovie.gif"
+        "romfs:/startupmovie.gif",
+        "romfs:/Contents/startupmovie.gif", 
+        "sdmc:/startupmovie.gif",
+        "startupmovie.gif"
     };
     
     // Load first logo
@@ -99,9 +120,11 @@ void show_logos(void)
     }
     
     if (!logo1 && !logo2) {
-        printf("Failed to load logos\n");
+        printf("No logos found, continuing without them\n");
+        // Clean up and return
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
+        if (controller) SDL_GameControllerClose(controller);
         IMG_Quit();
         SDL_Quit();
         return;
@@ -139,6 +162,7 @@ void show_logos(void)
     // Main loop for logos
     Uint32 start_time = SDL_GetTicks();
     bool running = true;
+    Uint32 last_frame_time = start_time;
     
     while (running) {
         SDL_Event event;
@@ -148,20 +172,27 @@ void show_logos(void)
             if (event.type == SDL_QUIT) {
                 running = false;
             }
-            // Check for any button press
+            // Check for any button press (gamepad or keyboard)
             if (event.type == SDL_JOYBUTTONDOWN || 
                 event.type == SDL_KEYDOWN ||
                 event.type == SDL_CONTROLLERBUTTONDOWN) {
+                printf("Button pressed, exiting logos\n");
                 running = false;
             }
         }
         
         // Check for timeout (3 seconds)
         if (SDL_GetTicks() - start_time > 3000) {
+            printf("3 seconds elapsed, exiting logos\n");
             running = false;
         }
         
-        // Clear screen
+        // Calculate delta time for smooth frame pacing
+        Uint32 current_time = SDL_GetTicks();
+        Uint32 delta_time = current_time - last_frame_time;
+        last_frame_time = current_time;
+        
+        // Clear screen with black
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         
@@ -177,19 +208,56 @@ void show_logos(void)
         // Update screen
         SDL_RenderPresent(renderer);
         
-        // Small delay to prevent high CPU usage
-        SDL_Delay(16); // ~60 FPS
+        // Frame rate limiting (if vsync is off)
+        if (delta_time < 16) { // ~60 FPS
+            SDL_Delay(16 - delta_time);
+        }
     }
     
     printf("Logos displayed for %u ms\n", SDL_GetTicks() - start_time);
     
+    // Fade to black before cleanup (optional)
+    for (int i = 0; i < 10; i++) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(16);
+    }
+    
     // Cleanup
-    if (logo1) SDL_DestroyTexture(logo1);
-    if (logo2) SDL_DestroyTexture(logo2);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    if (logo1) {
+        SDL_DestroyTexture(logo1);
+        logo1 = NULL;
+    }
+    if (logo2) {
+        SDL_DestroyTexture(logo2);
+        logo2 = NULL;
+    }
+    
+    // Destroy renderer and window
+    if (renderer) {
+        SDL_DestroyRenderer(renderer);
+        renderer = NULL;
+    }
+    
+    if (window) {
+        SDL_DestroyWindow(window);
+        window = NULL;
+    }
+    
+    // Close controller
+    if (controller) {
+        SDL_GameControllerClose(controller);
+        controller = NULL;
+    }
+    
+    // Quit SDL subsystems
     IMG_Quit();
     SDL_Quit();
+    
+    // IMPORTANT: Add a pause to let SDL fully clean up
+    printf("Waiting for SDL to fully clean up...\n");
+    svcSleepThread(3000000000ULL); // 3 seconds pause
     
     printf("=== Logos finished ===\n");
 }
