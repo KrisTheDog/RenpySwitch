@@ -27,42 +27,19 @@ AccountUid userID = {0};
    Функция для отображения логотипов
 ------------------------------------------------------- */
 void show_logos(void) {
-    // Инициализация SDL с поддержкой джойстика
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK) < 0) {
-        printf("SDL_Init failed: %s\n", SDL_GetError());
+    // Проверяем, есть ли уже окно и рендерер от видеоплеера
+    if (!global_window || !global_renderer) {
+        //printf("[Logos] Video player window/renderer not available, skipping\n");
         return;
     }
     
-    // Инициализация контроллера Switch
-    SDL_JoystickEventState(SDL_ENABLE);
-    SDL_JoystickOpen(0);
+    //printf("[Logos] Using existing SDL window and renderer from video player\n");
     
-    // Инициализация SDL_image только с PNG и JPG
+    // Инициализация IMG для загрузки картинок (без повторной инициализации SDL)
     int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
     if (!(IMG_Init(imgFlags) & imgFlags)) {
-        printf("IMG_Init failed: %s\n", IMG_GetError());
+        //printf("[Logos] IMG_Init failed: %s\n", IMG_GetError());
         // Продолжаем работу, возможно GIF загрузится
-    }
-    
-    // Создание окна
-    SDL_Window* window = SDL_CreateWindow("Logo", 0, 0, 1280, 720, 
-                                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
-    if (!window) {
-        printf("Failed to create window: %s\n", SDL_GetError());
-        IMG_Quit();
-        SDL_Quit();
-        return;
-    }
-    
-    // Создание рендерера
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 
-                                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        printf("Failed to create renderer: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        IMG_Quit();
-        SDL_Quit();
-        return;
     }
     
     // Загрузка логотипов
@@ -72,93 +49,51 @@ void show_logos(void) {
     // Пробуем загрузить Nintendo логотип (PNG)
     SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
     if (nintendo_surface) {
-        nintendo_texture = SDL_CreateTextureFromSurface(renderer, nintendo_surface);
+        nintendo_texture = SDL_CreateTextureFromSurface(global_renderer, nintendo_surface);
         SDL_FreeSurface(nintendo_surface);
-        printf("Nintendo logo loaded successfully\n");
+        //printf("[Logos] Nintendo logo loaded successfully\n");
     } else {
-        printf("Failed to load nintendologo.png: %s\n", IMG_GetError());
+        //printf("[Logos] Failed to load nintendologo.png: %s\n", IMG_GetError());
     }
     
-    // Пробуем загрузить startupmovie как GIF (без флага IMG_INIT_GIF)
+    // Пробуем загрузить startupmovie как GIF
     SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
     if (startup_surface) {
-        startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
+        startup_texture = SDL_CreateTextureFromSurface(global_renderer, startup_surface);
         SDL_FreeSurface(startup_surface);
-        printf("Startup movie loaded successfully as GIF\n");
+        //printf("[Logos] Startup movie loaded successfully as GIF\n");
     } else {
-        printf("Failed to load startupmovie.gif: %s\n", IMG_GetError());
+        //printf("[Logos] Failed to load startupmovie.gif: %s\n", IMG_GetError());
         // Попробуем загрузить как PNG на случай, если есть оба файла
         startup_surface = IMG_Load("romfs:/startupmovie.png");
         if (startup_surface) {
-            startup_texture = SDL_CreateTextureFromSurface(renderer, startup_surface);
+            startup_texture = SDL_CreateTextureFromSurface(global_renderer, startup_surface);
             SDL_FreeSurface(startup_surface);
-            printf("Startup movie loaded as PNG instead\n");
+            printf("[Logos] Startup movie loaded as PNG instead\n");
         }
     }
     
     // Если хотя бы один логотип загружен, отображаем
     if (nintendo_texture || startup_texture) {
+        // Инициализация контроллера Switch
+        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+        PadState pad;
+        padInitializeDefault(&pad);
+        
         Uint32 startTime = SDL_GetTicks();
         bool quit = false;
         
         while (!quit) {
-            // Обработка событий с улучшенной поддержкой Switch контроллера
-            SDL_Event event;
-            while (SDL_PollEvent(&event)) {
-                switch (event.type) {
-                    case SDL_QUIT:
-                        quit = true;
-                        break;
-                        
-                    case SDL_KEYDOWN:
-                        // Любая клавиша клавиатуры
-                        printf("Key pressed: %d\n", event.key.keysym.sym);
-                        quit = true;
-                        break;
-                        
-                    case SDL_JOYBUTTONDOWN:
-                        // Любая кнопка джойстика
-                        printf("Joystick button pressed: %d\n", event.jbutton.button);
-                        quit = true;
-                        break;
-                        
-                    case SDL_JOYHATMOTION:
-                        // Нажатие на D-pad
-                        if (event.jhat.value != 0) {
-                            printf("Joystick hat motion: %d\n", event.jhat.value);
-                            quit = true;
-                        }
-                        break;
-                        
-                    case SDL_JOYAXISMOTION:
-                        // Движение стиков (обрабатываем как нажатие, если значение большое)
-                        if (abs(event.jaxis.value) > 16000) {
-                            printf("Joystick axis motion: %d\n", event.jaxis.axis);
-                            quit = true;
-                        }
-                        break;
-                        
-                    case SDL_CONTROLLERBUTTONDOWN:
-                        // Кнопка контроллера
-                        printf("Controller button pressed: %d\n", event.cbutton.button);
-                        quit = true;
-                        break;
-                        
-                    case SDL_FINGERDOWN:
-                        // Касание тачскрина
-                        printf("Touch input detected\n");
-                        quit = true;
-                        break;
-                        
-                    case SDL_MOUSEBUTTONDOWN:
-                        // Нажатие кнопки мыши
-                        printf("Mouse button pressed\n");
-                        quit = true;
-                        break;
-                        
-                    default:
-                        break;
-                }
+            // Проверка кнопок Switch через PadState (как в видеоплеере)
+            padUpdate(&pad);
+            u64 kHeld = padGetButtons(&pad);
+            
+            // Любая кнопка пропускает
+            if (kHeld & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Y |
+                         HidNpadButton_Plus | HidNpadButton_Minus | HidNpadButton_Up | HidNpadButton_Down |
+                         HidNpadButton_Left | HidNpadButton_Right)) {
+                //printf("[Logos] Button pressed, skipping logos\n");
+                quit = true;
             }
             
             // Проверка таймаута (3 секунды)
@@ -167,55 +102,53 @@ void show_logos(void) {
             }
             
             // Очистка экрана
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
+            SDL_SetRenderDrawColor(global_renderer, 0, 0, 0, 255);
+            SDL_RenderClear(global_renderer);
             
-            // Ключевое изменение для док-режима:
-            // Получаем текущие размеры окна (работает для любого разрешения)
+            // Получаем текущие размеры окна
             int windowWidth, windowHeight;
-            SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+            SDL_GetWindowSize(global_window, &windowWidth, &windowHeight);
             
             // Отображение логотипов с динамическим расчетом позиций
             if (nintendo_texture) {
                 int w, h;
                 SDL_QueryTexture(nintendo_texture, NULL, NULL, &w, &h);
-                // Левый верхний угол (фиксированный отступ 20px)
+                // Левый верхний угол
                 SDL_Rect dest = {20, 20, w, h};
-                SDL_RenderCopy(renderer, nintendo_texture, NULL, &dest);
+                SDL_RenderCopy(global_renderer, nintendo_texture, NULL, &dest);
             }
             
             if (startup_texture) {
                 int w, h;
                 SDL_QueryTexture(startup_texture, NULL, NULL, &w, &h);
-                // Правый нижний угол: 
-                // Рассчитываем позицию от правого и нижнего края окна
+                // Правый нижний угол
                 SDL_Rect dest = {windowWidth - w - 20, windowHeight - h - 20, w, h};
-                SDL_RenderCopy(renderer, startup_texture, NULL, &dest);
+                SDL_RenderCopy(global_renderer, startup_texture, NULL, &dest);
             }
             
             // Обновление экрана
-            SDL_RenderPresent(renderer);
+            SDL_RenderPresent(global_renderer);
             SDL_Delay(16);  // ~60 FPS
         }
         
-        // === ВАЖНОЕ ДОБАВЛЕНИЕ ===
-        // Очистка экрана перед выходом (чтобы изображения не "зависали")
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        SDL_RenderPresent(renderer);
-        // =========================
+        // Очистка экрана перед выходом
+        SDL_SetRenderDrawColor(global_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(global_renderer);
+        SDL_RenderPresent(global_renderer);
         
+        //printf("[Logos] Logos screen finished\n");
     } else {
-        printf("No logos were loaded, skipping logo screen\n");
+        //printf("[Logos] No logos were loaded, skipping logo screen\n");
     }
     
-    // Очистка ресурсов
+    // Освобождаем текстуры (но не SDL, так как она используется видеоплеером)
     if (nintendo_texture) SDL_DestroyTexture(nintendo_texture);
     if (startup_texture) SDL_DestroyTexture(startup_texture);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    
+    // Завершаем IMG, но не SDL
     IMG_Quit();
-    SDL_Quit();
+    
+    // Не вызываем SDL_Quit() - видеоплеер продолжает использовать SDL!
 }
 
 /* -------------------------------------------------------
@@ -618,11 +551,9 @@ int main(int argc, char* argv[])
 
     video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
-    video_player_quit();
     // Показ логотипов при запуске
     show_logos();
 
-    video_player_init();
     play_video_file_delay("romfs:/Contents/game/intro.webm", 1, 3.0f);
     video_player_quit();
     // printf("=== Testing video playback ===\n");
