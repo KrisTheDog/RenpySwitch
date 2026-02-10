@@ -1103,8 +1103,174 @@ void play_video_file_delay(const char *input_path, int skip_enabled, float delay
     printf("[Video] Finished\n");
 }
 
+/* -------------------------------------------------------
+   Функция для отображения логотипов
+------------------------------------------------------- */
+void show_logos(void) {
+    printf("[Video] Starting logo display\n");
+    
+    // Проверяем, инициализирована ли SDL видео подсистема
+    if (!sdl_video_initialized) {
+        printf("[Video] Initializing SDL video for logos\n");
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+            printf("[Video] SDL_InitSubSystem video failed: %s\n", SDL_GetError());
+            return;
+        }
+        sdl_video_initialized = true;
+    }
+    
+    // Инициализация SDL_image
+    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
+        printf("[Video] IMG_Init failed: %s\n", IMG_GetError());
+        // Продолжаем работу
+    }
+    
+    // Создаем временное окно для логотипов
+    SDL_Window* logo_window = SDL_CreateWindow("Logos", 0, 0, 1280, 720, 
+                                               SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
+    if (!logo_window) {
+        printf("[Video] Failed to create logo window: %s\n", SDL_GetError());
+        IMG_Quit();
+        return;
+    }
+    
+    // Создаем временный рендерер
+    SDL_Renderer* logo_renderer = SDL_CreateRenderer(logo_window, -1, 
+                                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!logo_renderer) {
+        printf("[Video] Failed to create logo renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(logo_window);
+        IMG_Quit();
+        return;
+    }
+    
+    // Загрузка логотипов
+    SDL_Texture* nintendo_texture = NULL;
+    SDL_Texture* startup_texture = NULL;
+    
+    // Пробуем загрузить Nintendo логотип (PNG)
+    SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
+    if (nintendo_surface) {
+        nintendo_texture = SDL_CreateTextureFromSurface(logo_renderer, nintendo_surface);
+        SDL_FreeSurface(nintendo_surface);
+        printf("[Video] Nintendo logo loaded successfully\n");
+    } else {
+        printf("[Video] Failed to load nintendologo.png: %s\n", IMG_GetError());
+    }
+    
+    // Пробуем загрузить startupmovie как GIF (без флага IMG_INIT_GIF)
+    SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
+    if (startup_surface) {
+        startup_texture = SDL_CreateTextureFromSurface(logo_renderer, startup_surface);
+        SDL_FreeSurface(startup_surface);
+        printf("[Video] Startup movie loaded successfully as GIF\n");
+    } else {
+        printf("[Video] Failed to load startupmovie.gif: %s\n", IMG_GetError());
+        // Попробуем загрузить как PNG на случай, если есть оба файла
+        startup_surface = IMG_Load("romfs:/startupmovie.png");
+        if (startup_surface) {
+            startup_texture = SDL_CreateTextureFromSurface(logo_renderer, startup_surface);
+            SDL_FreeSurface(startup_surface);
+            printf("[Video] Startup movie loaded as PNG instead\n");
+        }
+    }
+    
+    // Если хотя бы один логотип загружен, отображаем
+    if (nintendo_texture || startup_texture) {
+        Uint32 startTime = SDL_GetTicks();
+        bool quit = false;
+        
+        // Инициализация контроллера Switch для обработки ввода
+        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+        PadState pad;
+        padInitializeDefault(&pad);
+        
+        // Основной цикл отображения логотипов
+        while (!quit) {
+            // Проверка кнопок контроллера Switch
+            padUpdate(&pad);
+            u64 kDown = padGetButtonsDown(&pad);
+            u64 kHeld = padGetButtons(&pad);
+            
+            // Если нажата любая кнопка - завершаем показ
+            if (kDown != 0) {
+                printf("[Video] Button pressed: 0x%016llX\n", kDown);
+                quit = true;
+            }
+            
+            // Также обрабатываем SDL события на всякий случай
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT ||
+                    event.type == SDL_KEYDOWN ||
+                    event.type == SDL_JOYBUTTONDOWN ||
+                    event.type == SDL_CONTROLLERBUTTONDOWN ||
+                    event.type == SDL_FINGERDOWN ||
+                    event.type == SDL_MOUSEBUTTONDOWN) {
+                    quit = true;
+                }
+            }
+            
+            // Проверка таймаута (3 секунды)
+            if (SDL_GetTicks() - startTime >= 3000) {
+                quit = true;
+            }
+            
+            // Очистка экрана
+            SDL_SetRenderDrawColor(logo_renderer, 0, 0, 0, 255);
+            SDL_RenderClear(logo_renderer);
+            
+            // Получаем текущие размеры окна для док-режима
+            int windowWidth, windowHeight;
+            SDL_GetWindowSize(logo_window, &windowWidth, &windowHeight);
+            
+            // Отображение логотипов с динамическим расчетом позиций
+            if (nintendo_texture) {
+                int w, h;
+                SDL_QueryTexture(nintendo_texture, NULL, NULL, &w, &h);
+                SDL_Rect dest = {20, 20, w, h};  // Левый верхний угол
+                SDL_RenderCopy(logo_renderer, nintendo_texture, NULL, &dest);
+            }
+            
+            if (startup_texture) {
+                int w, h;
+                SDL_QueryTexture(startup_texture, NULL, NULL, &w, &h);
+                SDL_Rect dest = {windowWidth - w - 20, windowHeight - h - 20, w, h};  // Правый нижний угол
+                SDL_RenderCopy(logo_renderer, startup_texture, NULL, &dest);
+            }
+            
+            // Обновление экрана
+            SDL_RenderPresent(logo_renderer);
+            SDL_Delay(16);  // ~60 FPS
+        }
+        
+        // Очистка экрана перед выходом (чтобы изображения не "зависали")
+        SDL_SetRenderDrawColor(logo_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(logo_renderer);
+        SDL_RenderPresent(logo_renderer);
+        
+    } else {
+        printf("[Video] No logos were loaded, skipping logo screen\n");
+    }
+    
+    // Очистка ресурсов логотипов
+    if (nintendo_texture) SDL_DestroyTexture(nintendo_texture);
+    if (startup_texture) SDL_DestroyTexture(startup_texture);
+    
+    // Уничтожаем временный рендерер и окно
+    SDL_DestroyRenderer(logo_renderer);
+    SDL_DestroyWindow(logo_window);
+    
+    // Не деинициализируем SDL_image и SDL видео подсистему,
+    // так как они могут понадобиться видео-плееру позже
+    
+    printf("[Video] Logo display finished\n");
+}
+
 void play_video_file(const char *path, int skip_enabled)
 {
     play_video_file_delay(path, skip_enabled, DEFAULT_DELAY_SECONDS);
 }
+
 
