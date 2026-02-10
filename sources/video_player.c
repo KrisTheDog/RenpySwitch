@@ -16,6 +16,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <time.h>
+#include <SDL2/SDL_image.h>
 
 #define SKIP_HOLD_TIME 3.0
 #define DEFAULT_DELAY_SECONDS 3.0
@@ -1119,9 +1120,8 @@ void show_logos(void) {
         sdl_video_initialized = true;
     }
     
-    // Инициализация SDL_image
-    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
-    if (!(IMG_Init(imgFlags) & imgFlags)) {
+    // Простая инициализация SDL_image без флагов
+    if (!IMG_Init(0)) {
         printf("[Video] IMG_Init failed: %s\n", IMG_GetError());
         // Продолжаем работу
     }
@@ -1149,7 +1149,7 @@ void show_logos(void) {
     SDL_Texture* nintendo_texture = NULL;
     SDL_Texture* startup_texture = NULL;
     
-    // Пробуем загрузить Nintendo логотип (PNG)
+    // Пробуем загрузить Nintendo логотип
     SDL_Surface* nintendo_surface = IMG_Load("romfs:/nintendologo.png");
     if (nintendo_surface) {
         nintendo_texture = SDL_CreateTextureFromSurface(logo_renderer, nintendo_surface);
@@ -1159,12 +1159,12 @@ void show_logos(void) {
         printf("[Video] Failed to load nintendologo.png: %s\n", IMG_GetError());
     }
     
-    // Пробуем загрузить startupmovie как GIF (без флага IMG_INIT_GIF)
+    // Пробуем загрузить startupmovie
     SDL_Surface* startup_surface = IMG_Load("romfs:/startupmovie.gif");
     if (startup_surface) {
         startup_texture = SDL_CreateTextureFromSurface(logo_renderer, startup_surface);
         SDL_FreeSurface(startup_surface);
-        printf("[Video] Startup movie loaded successfully as GIF\n");
+        printf("[Video] Startup movie loaded successfully\n");
     } else {
         printf("[Video] Failed to load startupmovie.gif: %s\n", IMG_GetError());
         // Попробуем загрузить как PNG на случай, если есть оба файла
@@ -1191,7 +1191,6 @@ void show_logos(void) {
             // Проверка кнопок контроллера Switch
             padUpdate(&pad);
             u64 kDown = padGetButtonsDown(&pad);
-            u64 kHeld = padGetButtons(&pad);
             
             // Если нажата любая кнопка - завершаем показ
             if (kDown != 0) {
@@ -1262,8 +1261,8 @@ void show_logos(void) {
     SDL_DestroyRenderer(logo_renderer);
     SDL_DestroyWindow(logo_window);
     
-    // Не деинициализируем SDL_image и SDL видео подсистему,
-    // так как они могут понадобиться видео-плееру позже
+    // Деинициализация SDL_image
+    IMG_Quit();
     
     printf("[Video] Logo display finished\n");
 }
@@ -1272,5 +1271,6 @@ void play_video_file(const char *path, int skip_enabled)
 {
     play_video_file_delay(path, skip_enabled, DEFAULT_DELAY_SECONDS);
 }
+
 
 
