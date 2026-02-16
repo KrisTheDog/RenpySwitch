@@ -13,6 +13,7 @@
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
+#include <malloc.h>
 
 /* -------------------------------------------------------
    Globals
@@ -382,11 +383,57 @@ static PyObject* restartprogram(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 }
 
+/* -------------------------------------------------------
+   Memory Debug Function
+------------------------------------------------------- */
+
+void print_memory_status(void) {
+    u64 mem_available = 0;
+    u64 mem_used = 0;
+    
+    // Получаем информацию о системной памяти через SVC
+    svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+    
+    // Получаем информацию о куче (Heap) newlib
+    struct mallinfo mi = mallinfo();
+    
+    printf("\n=== MEMORY DEBUG INFO ===\n");
+    printf("System Total:    %lu MB\n", mem_available / (1024 * 1024));
+    printf("System Used:     %lu MB\n", mem_used / (1024 * 1024));
+    printf("System Free:     %lu MB\n", (mem_available - mem_used) / (1024 * 1024));
+    
+    printf("Heap Arena:      %d MB\n", mi.arena / (1024 * 1024));
+    printf("Heap In Use:     %d MB\n", mi.uordblks / (1024 * 1024));
+    printf("Heap Free:       %d MB\n", mi.fordblks / (1024 * 1024));
+    
+    // Информация о разделе Save
+    FsFileSystem* fs = fsdevGetDeviceFileSystem("save");
+    if (fs) {
+        u64 save_total = 0;
+        u64 save_free = 0;
+        fsFsGetTotalSpace(fs, "/", &save_total);
+        fsFsGetFreeSpace(fs, "/", &save_free);
+        printf("Save Total:      %lu MB\n", save_total / (1024 * 1024));
+        printf("Save Free:       %lu MB\n", save_free / (1024 * 1024));
+    } else {
+        printf("Save FS:         NOT MOUNTED\n");
+    }
+    printf("==========================\n\n");
+}
+
+static PyObject* py_mem_info(PyObject* self, PyObject* args)
+{
+    print_memory_status();
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef OtrhMethods[] = {
     {"commitsave", commitsave, METH_NOARGS, NULL},
     {"startboost", startboost, METH_NOARGS, NULL},
     {"disableboost", disableboost, METH_NOARGS, NULL},
     {"restartprogram", restartprogram, METH_NOARGS, NULL},
+    { "mem_info", py_mem_info, METH_NOARGS, "Print memory status to log" },
     {NULL, NULL, 0, NULL}
 };
 
