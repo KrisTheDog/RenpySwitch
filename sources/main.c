@@ -542,8 +542,10 @@ void __libnx_initheap(void)
     svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
     svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
 
-    if (mem_available > mem_used + 0x200000)
-        size = (mem_available - mem_used - 0x200000) & ~0x1FFFFF;
+    // ИЗМЕНЕНИЕ: Оставляем системе 64МБ (0x4000000) вместо 2МБ.
+    // Это даст буфер для работы файловой системы при сохранении.
+    if (mem_available > mem_used + 0x4000000)
+        size = (mem_available - mem_used - 0x4000000) & ~0x1FFFFF;
 
     if (size == 0)
         size = 0x2000000*16; // 256 MB fallback
