@@ -590,6 +590,7 @@ Result createSaveData(void)
 void userAppInit()
 {
     fsInitialize();
+    nsInitialize();
     fsdevMountSdmc();
 
     freopen("sdmc:/renpy_switch.log", "w", stdout);
@@ -669,6 +670,8 @@ void userAppExit(void)
     fsdevUnmountDevice("save");
     socketExit();
     romfsExit();
+    nsExit();
+    fsExit(); 
 }
 
 /* -------------------------------------------------------
