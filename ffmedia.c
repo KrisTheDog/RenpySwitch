@@ -1508,6 +1508,19 @@ int media_read_audio(struct MediaState *ms, Uint8 *stream, int len) {
     return rv;
 }
 
+/* Функция, отсутствовавшая в новом файле, но необходимая для линковки */
+void media_wait_ready(struct MediaState *ms) {
+#ifndef __EMSCRIPTEN__
+    SDL_LockMutex(ms->lock);
+
+    while (!ms->ready) {
+        SDL_CondWait(ms->cond, ms->lock);
+    }
+
+    SDL_UnlockMutex(ms->lock);
+#endif
+}
+
 int media_is_ready(struct MediaState *ms) {
     return ms->ready;								   			 
 }
