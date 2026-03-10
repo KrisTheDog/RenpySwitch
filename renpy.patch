@@ -1460,8 +1460,8 @@ diff -Naur b/renpy/loader.py a/renpy/loader.py
 -    fn = os.path.join(renpy.config.gamedir, fn)
 -    dn = os.path.dirname(fn)
 +    if fn.startswith("cache/") and renpy.switch:
-+        fn = "save://" + fn
-+        dn = "save://cache"
++        fn = "save:/" + fn
++        dn = "save:/cache"
 +    else:
 +        fn = os.path.join(renpy.config.gamedir, fn)
 +        dn = os.path.dirname(fn)
@@ -1636,7 +1636,7 @@ diff -Naur b/renpy/log.py a/renpy/log.py
 +                except Exception:
 +                    s = repr((s,) + args)
 +                s += "\n"
-+            with real_open("save://Logs/log.log", "a+") as f:
++            with real_open("save:/Logs/log.log", "a+") as f:
 +                f.write(str(s))
 +            return
 +
@@ -1660,7 +1660,7 @@ diff -Naur b/renpy/main.py a/renpy/main.py
      game.basepath = renpy.config.gamedir
      renpy.config.searchpath = [ renpy.config.gamedir ]
 +    if renpy.switch:
-+        renpy.config.searchpath = [ renpy.config.gamedir, "save://" ]
++        renpy.config.searchpath = [ renpy.config.gamedir, "save:/" ]
  
      # Find the common directory.
      commondir = renpy.__main__.path_to_common(renpy.config.renpy_base) # E1101 @UndefinedVariable
@@ -1706,7 +1706,7 @@ diff -Naur b/renpy/persistent.py a/renpy/persistent.py
          files = [ os.path.expanduser("~/.renpy/persistent"),
                    os.path.expanduser("~/Library/RenPy/persistent") ]
 +    elif renpy.switch:
-+        files = ["save://MultiPersistent"]
++        files = ["save:/MultiPersistent"]
      else:
          files = [ os.path.expanduser("~/.renpy/persistent") ]
  
@@ -1984,6 +1984,6 @@ diff -Naur b/renpy.py a/renpy.py
 +        main()
 +    except:
 +        if sys.platform == 'horizon':
-+            with open("save://exception.log", "w") as f:
++            with open("save:/exception.log", "w") as f:
 +                import traceback
 +                f.write(traceback.format_exc())
