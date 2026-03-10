@@ -50,7 +50,6 @@ static const double frame_early_delivery = .005;
 static SDL_Surface *rgb_surface = NULL;
 static SDL_Surface *rgba_surface = NULL;			 
 
-
 /*******************************************************************************
  * SDL_RWops <-> AVIOContext
  */
@@ -60,16 +59,16 @@ static int rwops_read(void *opaque, uint8_t *buf, int buf_size) {
 
     int rv = rw->read(rw, buf, 1, buf_size);
 
-    if (rv == 0) {
-        return AVERROR_EOF;
-    }
+	if (rv == 0) {
+		return AVERROR_EOF;
+	}
 
     return rv;
 
 }
 
 static int rwops_write(void *opaque, uint8_t *buf, int buf_size) {
-                                                           
+														   
     return -1;
 }
 
@@ -77,7 +76,7 @@ static int64_t rwops_seek(void *opaque, int64_t offset, int whence) {
     SDL_RWops *rw = (SDL_RWops *) opaque;
 
     if (whence == AVSEEK_SIZE) {
-        return rw->size(rw);
+    	return rw->size(rw);
     }
 
     // Ignore flags like AVSEEK_FORCE.
@@ -93,9 +92,9 @@ static int64_t rwops_seek(void *opaque, int64_t offset, int whence) {
 static AVIOContext *rwops_open(SDL_RWops *rw) {
 
     unsigned char *buffer = av_malloc(RWOPS_BUFFER);
-    if (buffer == NULL) {
-        return NULL;
-    }
+	if (buffer == NULL) {
+		return NULL;
+	}
     AVIOContext *rv = avio_alloc_context(
         buffer,
         RWOPS_BUFFER,
@@ -105,52 +104,52 @@ static AVIOContext *rwops_open(SDL_RWops *rw) {
         rwops_write,
         rwops_seek);
     if (rv == NULL) {
-        av_free(buffer);
-        return NULL;
+    	av_free(buffer);
+    	return NULL;
     }
 
     return rv;
 }
 
 static void rwops_close(SDL_RWops *rw) {
-    rw->close(rw);
+	rw->close(rw);
 }
 
-                                                                
+																
 static double current_time = 0;
 
 typedef struct PacketQueueEntry {
-    AVPacket *pkt;
-    struct PacketQueueEntry *next;
+	AVPacket *pkt;
+	struct PacketQueueEntry *next;
 } PacketQueueEntry;
 
 typedef struct PacketQueue {
-    PacketQueueEntry *first;
-    PacketQueueEntry *last;
+	PacketQueueEntry *first;
+	PacketQueueEntry *last;
 } PacketQueue;
 
 typedef struct FrameQueue {
-    AVFrame *first;
-    AVFrame *last;
+	AVFrame *first;
+	AVFrame *last;
 } FrameQueue;
 
 
 typedef struct SurfaceQueueEntry {
-    struct SurfaceQueueEntry *next;
+	struct SurfaceQueueEntry *next;
 
-    SDL_Surface *surf;
+	SDL_Surface *surf;
 
-    /* The pts, converted to seconds. */
-    double pts;
+	/* The pts, converted to seconds. */
+	double pts;
 
-    /* The format. This is not refcounted, but it's kept alive by being
-     * the format of one of the sampel surfaces.
-     */
-    SDL_PixelFormat *format;
+	/* The format. This is not refcounted, but it's kept alive by being
+	 * the format of one of the sampel surfaces.
+	 */
+	SDL_PixelFormat *format;
 
-    /* As with SDL_Surface. */
-    int w, h, pitch;
-    void *pixels;
+	/* As with SDL_Surface. */
+	int w, h, pitch;
+	void *pixels;
 
 } SurfaceQueueEntry;
 
@@ -162,91 +161,91 @@ typedef struct MediaState {
     /* The thread associated with decoding this media. */
     SDL_Thread *thread;
 
-    /* The condition and lock. */
-    SDL_cond* cond;
-    SDL_mutex* lock;
+	/* The condition and lock. */
+	SDL_cond* cond;
+	SDL_mutex* lock;
 
-    SDL_RWops *rwops;
-    char *filename;
+	SDL_RWops *rwops;
+	char *filename;
 
-    /*
-     * True if we this stream should have video.
-     */
-    int want_video;
+	/*
+	 * True if we this stream should have video.
+	 */
+	int want_video;
 
-    /* This becomes true once the decode thread has finished initializing
-     * and the readers and writers can do their thing.
-     */
-    int ready;
+	/* This becomes true once the decode thread has finished initializing
+	 * and the readers and writers can do their thing.
+	 */
+	int ready;
 
-    /* This is set to true when data has been read, in order to ask the
-     * decode thread to produce more data.
-     */
-    int needs_decode; // Lock.
+	/* This is set to true when data has been read, in order to ask the
+	 * decode thread to produce more data.
+	 */
+	int needs_decode; // Lock.
 
-    /*
-     * This is set to true when data has been read, in order to ask the
-     * decode thread to shut down and deallocate all resources.
-     */
-    int quit; // Lock
+	/*
+	 * This is set to true when data has been read, in order to ask the
+	 * decode thread to shut down and deallocate all resources.
+	 */
+	int quit; // Lock
 
-    /* The number of seconds to skip at the start. */
-    double skip;
+	/* The number of seconds to skip at the start. */
+	double skip;
 
-    /* These become true when the audio and video finish. */
-    int audio_finished;
-    int video_finished;
+	/* These become true when the audio and video finish. */
+	int audio_finished;
+	int video_finished;
 
-    /* Indexes of video and audio streams. */
-    int video_stream;
-    int audio_stream;
+	/* Indexes of video and audio streams. */
+	int video_stream;
+	int audio_stream;
 
-    /* The main context. */
-    AVFormatContext *ctx;
-    /* Contexts for decoding audio and video streams. */
-    AVCodecContext *video_context;
-    AVCodecContext *audio_context;
-    /* Queues of packets going to the audio and video streams. */
-    PacketQueue video_packet_queue;
-    PacketQueue audio_packet_queue;
-    /* The total duration of the video. Only used for information purposes. */
-    double total_duration;
-    /* Audio Stuff ***********************************************************/
-    /* The queue of converted audio frames. */
-    FrameQueue audio_queue; // Lock
-    /* The size of the audio queue, and the target size in seconds. */
-    int audio_queue_samples;
-    int audio_queue_target_samples;
-    /* A frame used for decoding. */
-    AVFrame *audio_decode_frame;
-    /* The audio frame being read from, and the index into the audio frame. */
-    AVFrame *audio_out_frame; // Lock
-    int audio_out_index; // Lock
-    SwrContext *swr;
-    /* The duration of the audio stream, in samples.
-     * -1 means to play until we run out of data.
-     */
-    int audio_duration;
-    /* The number of samples that have been read so far. */
-    int audio_read_samples; // Lock
-    /* A frame that video is decoded into. */
-    AVFrame *video_decode_frame;
-    /* Video Stuff ***********************************************************/
-    /* Software rescaling context. */
-    struct SwsContext *sws;
-    /* A queue of decoded video frames. */
-    SurfaceQueueEntry *surface_queue; // Lock
-    int surface_queue_size; // Lock
-    /* The offset between a pts timestamp and realtime. */
-    double video_pts_offset;
-    /* The wall time the last video frame was read. */
-    double video_read_time;
-    /* Are frame drops allowed? */
-    int frame_drops;
-    /* The time the pause happened, or 0 if we're not paused. */
-    double pause_time;
-    /* The offset between now and the time of the current frame, at least for video. */
-    double time_offset;
+	/* The main context. */
+	AVFormatContext *ctx;
+	/* Contexts for decoding audio and video streams. */
+	AVCodecContext *video_context;
+	AVCodecContext *audio_context;
+	/* Queues of packets going to the audio and video streams. */
+	PacketQueue video_packet_queue;
+	PacketQueue audio_packet_queue;
+	/* The total duration of the video. Only used for information purposes. */
+	double total_duration;
+	/* Audio Stuff ***********************************************************/
+	/* The queue of converted audio frames. */
+	FrameQueue audio_queue; // Lock
+	/* The size of the audio queue, and the target size in seconds. */
+	int audio_queue_samples;
+	int audio_queue_target_samples;
+	/* A frame used for decoding. */
+	AVFrame *audio_decode_frame;
+	/* The audio frame being read from, and the index into the audio frame. */
+	AVFrame *audio_out_frame; // Lock
+	int audio_out_index; // Lock
+	SwrContext *swr;
+	/* The duration of the audio stream, in samples.
+	 * -1 means to play until we run out of data.
+	 */
+	int audio_duration;
+	/* The number of samples that have been read so far. */
+	int audio_read_samples; // Lock
+	/* A frame that video is decoded into. */
+	AVFrame *video_decode_frame;
+	/* Video Stuff ***********************************************************/
+	/* Software rescaling context. */
+	struct SwsContext *sws;
+	/* A queue of decoded video frames. */
+	SurfaceQueueEntry *surface_queue; // Lock
+	int surface_queue_size; // Lock
+	/* The offset between a pts timestamp and realtime. */
+	double video_pts_offset;
+	/* The wall time the last video frame was read. */
+	double video_read_time;
+	/* Are frame drops allowed? */
+	int frame_drops;
+	/* The time the pause happened, or 0 if we're not paused. */
+	double pause_time;
+	/* The offset between now and the time of the current frame, at least for video. */
+	double time_offset;
     /* For tracking first frame */						   
     int first_frame_shown;
 
@@ -427,91 +426,91 @@ static void deallocate_deferred() {
 /* Frame queue ***************************************************************/
 
 static void enqueue_frame(FrameQueue *fq, AVFrame *frame) {
-    frame->opaque = NULL;
+	frame->opaque = NULL;
 
-    if (fq->first) {
-        fq->last->opaque = frame;
-        fq->last = frame;
-    } else {
-        fq->first = fq->last = frame;
-    }
+	if (fq->first) {
+		fq->last->opaque = frame;
+		fq->last = frame;
+	} else {
+		fq->first = fq->last = frame;
+	}
 }
 
 static AVFrame *dequeue_frame(FrameQueue *fq) {
-    if (!fq->first) {
-        return NULL;
-    }
+	if (!fq->first) {
+		return NULL;
+	}
 
-    AVFrame *rv = fq->first;
-    fq->first = (AVFrame *) rv->opaque;
+	AVFrame *rv = fq->first;
+	fq->first = (AVFrame *) rv->opaque;
 
-    if (!fq->first) {
-        fq->last = NULL;
-    }
-    return rv;
+	if (!fq->first) {
+		fq->last = NULL;
+	}
+	return rv;
 }
 
 
 /* Packet queue **************************************************************/
 
 static void enqueue_packet(PacketQueue *pq, AVPacket *pkt) {
-    PacketQueueEntry *pqe = av_malloc(sizeof(PacketQueueEntry));
-    if (pqe == NULL) {
-        av_packet_free(&pkt);
-        return;
-    }
+	PacketQueueEntry *pqe = av_malloc(sizeof(PacketQueueEntry));
+	if (pqe == NULL) {
+		av_packet_free(&pkt);
+		return;
+	}
 
-    pqe->pkt = pkt;
-    pqe->next = NULL;
+	pqe->pkt = pkt;
+	pqe->next = NULL;
 
-    if (!pq->first) {
-        pq->first = pq->last = pqe;
-    } else {
-        pq->last->next = pqe;
-        pq->last = pqe;
-    }
+	if (!pq->first) {
+		pq->first = pq->last = pqe;
+	} else {
+		pq->last->next = pqe;
+		pq->last = pqe;
+	}
 }
 
 static AVPacket *first_packet(PacketQueue *pq) {
-    if (pq->first) {
-        return pq->first->pkt;
-    } else {
-        return NULL;
-    }
+	if (pq->first) {
+		return pq->first->pkt;
+	} else {
+		return NULL;
+	}
 }
 
 static void dequeue_packet(PacketQueue *pq) {
-    if (! pq->first) {
-        return;
-    }
+	if (! pq->first) {
+		return;
+	}
 
-    PacketQueueEntry *pqe = pq->first;
-    pq->first = pqe->next;
+	PacketQueueEntry *pqe = pq->first;
+	pq->first = pqe->next;
 
-    if (!pq->first) {
-        pq->last = NULL;
-    }
+	if (!pq->first) {
+		pq->last = NULL;
+	}
 
-    av_packet_free(&pqe->pkt);
-    av_free(pqe);
+	av_packet_free(&pqe->pkt);
+	av_free(pqe);
 }
 
 static int count_packet_queue(PacketQueue *pq) {
     PacketQueueEntry *pqe = pq->first;
 
-    int rv = 0;
+	int rv = 0;
 
-    while (pqe) {
-        rv += 1;
-        pqe = pqe->next;
-    }
-    return rv;
+	while (pqe) {
+		rv += 1;
+		pqe = pqe->next;
+	}
+	return rv;
 }
 
 static void free_packet_queue(PacketQueue *pq) {
-    while(first_packet(pq)) {
-        dequeue_packet(pq);
-    }
+	while(first_packet(pq)) {
+		dequeue_packet(pq);
+	}
 }
 
 
@@ -521,59 +520,59 @@ static void free_packet_queue(PacketQueue *pq) {
  */
 static AVPacket *read_packet(MediaState *ms, PacketQueue *pq) {
 
-    AVPacket *pkt;
-    AVPacket *rv;
+	AVPacket *pkt;
+	AVPacket *rv;
 
-    while (1) {
+	while (1) {
 
-        rv = first_packet(pq);
-        if (rv) {
-            return rv;
-        }
+		rv = first_packet(pq);
+		if (rv) {
+			return rv;
+		}
 
-        pkt = av_packet_alloc();
+		pkt = av_packet_alloc();
 
-        if (!pkt) {
-            return NULL;
-        }
+		if (!pkt) {
+			return NULL;
+		}
 
-        if (av_read_frame(ms->ctx, pkt)) {
-                                                                 
-            return NULL;
-        }
+		if (av_read_frame(ms->ctx, pkt)) {
+																 
+			return NULL;
+		}
 
-        if (pkt->stream_index == ms->video_stream && ! ms->video_finished) {
-            enqueue_packet(&ms->video_packet_queue, pkt);
-                                                                                                        
-        } else if (pkt->stream_index == ms->audio_stream && ! ms->audio_finished) {
-            enqueue_packet(&ms->audio_packet_queue, pkt);
-                                                                                                        
-        } else {
-            av_packet_free(&pkt);
-        }
-    }
+		if (pkt->stream_index == ms->video_stream && ! ms->video_finished) {
+			enqueue_packet(&ms->video_packet_queue, pkt);
+																										
+		} else if (pkt->stream_index == ms->audio_stream && ! ms->audio_finished) {
+			enqueue_packet(&ms->audio_packet_queue, pkt);
+																										
+		} else {
+			av_packet_free(&pkt);
+		}
+	}
 }
 
 
 /* Surface queue *************************************************************/
 
 static void enqueue_surface(SurfaceQueueEntry **queue, SurfaceQueueEntry *sqe) {
-    while (*queue) {
-        queue = &(*queue)->next;
-    }
+	while (*queue) {
+		queue = &(*queue)->next;
+	}
 
-    *queue = sqe;
+	*queue = sqe;
 }
 
 
 static SurfaceQueueEntry *dequeue_surface(SurfaceQueueEntry **queue) {
-    SurfaceQueueEntry *rv = *queue;
+	SurfaceQueueEntry *rv = *queue;
 
-    if (rv) {
-        *queue = rv->next;
-    }
+	if (rv) {
+		*queue = rv->next;
+	}
 
-    return rv;
+	return rv;
 }
 
 /* Find decoder context ******************************************************/
@@ -581,24 +580,24 @@ static AVCodecContext *find_context(AVFormatContext *ctx, int index) {
 
     AVDictionary *opts = NULL;
 
-    if (index == -1) {
-        return NULL;
-    }
+	if (index == -1) {
+		return NULL;
+	}
 
-    const AVCodec *codec = NULL;
-    AVCodecContext *codec_ctx = NULL;
+	const AVCodec *codec = NULL;
+	AVCodecContext *codec_ctx = NULL;
 
-    codec_ctx = avcodec_alloc_context3(NULL);
+	codec_ctx = avcodec_alloc_context3(NULL);
 
-    if (codec_ctx == NULL) {
-        return NULL;
-    }
+	if (codec_ctx == NULL) {
+		return NULL;
+	}
 
-    if (avcodec_parameters_to_context(codec_ctx, ctx->streams[index]->codecpar) < 0) {
-        goto fail;
-    }
+	if (avcodec_parameters_to_context(codec_ctx, ctx->streams[index]->codecpar) < 0) {
+		goto fail;
+	}
 
-    codec_ctx->pkt_timebase = ctx->streams[index]->time_base;
+	codec_ctx->pkt_timebase = ctx->streams[index]->time_base;
 
     codec = avcodec_find_decoder(codec_ctx->codec_id);
 
@@ -611,18 +610,18 @@ static AVCodecContext *find_context(AVFormatContext *ctx, int index) {
     av_dict_set(&opts, "threads", "auto", 0);
     av_dict_set(&opts, "refcounted_frames", "0", 0);
 
-    if (avcodec_open2(codec_ctx, codec, &opts)) {
-        goto fail;
-    }
+	if (avcodec_open2(codec_ctx, codec, &opts)) {
+		goto fail;
+	}
 
-    return codec_ctx;
+	return codec_ctx;
 
 fail:
 
     av_dict_free(&opts);
 
-    avcodec_free_context(&codec_ctx);
-    return NULL;
+	avcodec_free_context(&codec_ctx);
+	return NULL;
 }
 
 
@@ -765,9 +764,9 @@ static enum AVPixelFormat get_pixel_format(SDL_Surface *surf) {
     uint32_t pixel;
     uint8_t *bytes = (uint8_t *) &pixel;
 
-    pixel = SDL_MapRGBA(surf->format, 1, 2, 3, 4);
+	pixel = SDL_MapRGBA(surf->format, 1, 2, 3, 4);
 
-    enum AVPixelFormat fmt;
+	enum AVPixelFormat fmt;
 
     if ((bytes[0] == 4 || bytes[0] == 0) && bytes[1] == 1) {
         fmt = AV_PIX_FMT_ARGB;
@@ -931,65 +930,65 @@ static SurfaceQueueEntry *decode_video_frame(MediaState *ms) {
 
 
 static void decode_video(MediaState *ms) {
-    if (!ms->video_context) {
-                                                   
-        ms->video_finished = 1;
-        return;
-    }
+	if (!ms->video_context) {
+												   
+		ms->video_finished = 1;
+		return;
+	}
 
-    if (!ms->video_decode_frame) {
-        ms->video_decode_frame = av_frame_alloc();
-    }
+	if (!ms->video_decode_frame) {
+		ms->video_decode_frame = av_frame_alloc();
+	}
 
-    if (!ms->video_decode_frame) {
-                                                       
-        ms->video_finished = 1;
-        return;
-    }
+	if (!ms->video_decode_frame) {
+													   
+		ms->video_finished = 1;
+		return;
+	}
 
-    SDL_LockMutex(ms->lock);
+	SDL_LockMutex(ms->lock);
 
     int target_frames = FRAMES;
-                                                                  
+																  
     if (ms->surface_queue_size == 0) {
         target_frames = 1;
-                                                                   
+																   
     }
 
-    if (!ms->video_finished && (ms->surface_queue_size < target_frames)) {
-                                                                
-                                                   
-        SDL_UnlockMutex(ms->lock);
+	if (!ms->video_finished && (ms->surface_queue_size < target_frames)) {
+																
+												   
+		SDL_UnlockMutex(ms->lock);
 
-        SurfaceQueueEntry *sqe = decode_video_frame(ms);
+		SurfaceQueueEntry *sqe = decode_video_frame(ms);
 
-        SDL_LockMutex(ms->lock);
+		SDL_LockMutex(ms->lock);
 
-        if (sqe) {
-            enqueue_surface(&ms->surface_queue, sqe);
-            ms->surface_queue_size += 1;
-                                                                         
-                                                  
+		if (sqe) {
+			enqueue_surface(&ms->surface_queue, sqe);
+			ms->surface_queue_size += 1;
+																		 
+												  
             
-                                                    
+													
             if (ms->surface_queue_size == 1) {
-                                                         
+														 
                 SDL_CondBroadcast(ms->cond);
             }
-        }
-                                                      
-         
-    }
-                                                                           
-                                                                       
-     
+		}
+													  
+		 
+	}
+																		   
+																	   
+	 
 
-    if (!ms->video_finished && (ms->surface_queue_size < FRAMES)) {
-        ms->needs_decode = 1;
-                                                  
-    }
+	if (!ms->video_finished && (ms->surface_queue_size < FRAMES)) {
+		ms->needs_decode = 1;
+												  
+	}
 
-    SDL_UnlockMutex(ms->lock);
+	SDL_UnlockMutex(ms->lock);
 }
 
 
@@ -1080,42 +1079,42 @@ done:
 
 SDL_Surface *media_read_video(MediaState *ms) {
 
-    SDL_Surface *rv = NULL;
-    SurfaceQueueEntry *sqe = NULL;
+	SDL_Surface *rv = NULL;
+	SurfaceQueueEntry *sqe = NULL;
 
-                                     
+									 
 
-    if (ms->video_stream == -1) {
-                                                 
-        return NULL;
-    }
+	if (ms->video_stream == -1) {
+												 
+		return NULL;
+	}
 
-                                                                  
+																  
     double now = SDL_GetTicks() / 1000.0;
     double playback_time = now - ms->time_offset;
 
-    SDL_LockMutex(ms->lock);
+	SDL_LockMutex(ms->lock);
 
 #ifndef __EMSCRIPTEN__
-    while (!ms->ready) {									 
-        SDL_CondWait(ms->cond, ms->lock);
-    }
+	while (!ms->ready) {									 
+	    SDL_CondWait(ms->cond, ms->lock);
+	}
 #endif
 
-    if (ms->pause_time > 0) {								
-        goto done;
-    }
+	if (ms->pause_time > 0) {								
+	    goto done;
+	}
 
-    if (!ms->surface_queue_size) {												
-        goto done;
-    }
-                                                   
+	if (!ms->surface_queue_size) {												
+		goto done;
+	}
+												   
     if (ms->video_pts_offset == 0.0) {															  
         ms->video_pts_offset = playback_time - ms->surface_queue->pts;																 
     }
 
     double frame_display_time = ms->surface_queue->pts + ms->video_pts_offset;
-                                                        
+														
     double threshold = frame_early_delivery * (ms->surface_queue_size > 1 ? 1.0 : 2.0);
     if (!ms->first_frame_shown || frame_display_time <= playback_time + threshold) {
         sqe = dequeue_surface(&ms->surface_queue);
@@ -1129,296 +1128,296 @@ SDL_Surface *media_read_video(MediaState *ms) {
 
 done:
     /* Only signal if we've consumed something. */
-    if (sqe) {
-        ms->needs_decode = 1;																					 
-        SDL_CondBroadcast(ms->cond);
-    }
+	if (sqe) {
+		ms->needs_decode = 1;																					 
+		SDL_CondBroadcast(ms->cond);
+	}
 
-    SDL_UnlockMutex(ms->lock);
+	SDL_UnlockMutex(ms->lock);
 
-    if (sqe) {
-        rv = SDL_CreateRGBSurfaceFrom(
-            sqe->pixels,
-            sqe->w,
-            sqe->h,
-            sqe->format->BitsPerPixel,
-            sqe->pitch,
-            sqe->format->Rmask,
-            sqe->format->Gmask,
-            sqe->format->Bmask,
-            sqe->format->Amask
-        );
+	if (sqe) {
+		rv = SDL_CreateRGBSurfaceFrom(
+			sqe->pixels,
+			sqe->w,
+			sqe->h,
+			sqe->format->BitsPerPixel,
+			sqe->pitch,
+			sqe->format->Rmask,
+			sqe->format->Gmask,
+			sqe->format->Bmask,
+			sqe->format->Amask
+		);
 
-        /* Force SDL to take over management of pixels. */
-        rv->flags &= ~SDL_PREALLOC;
-        av_free(sqe);
-    }
+		/* Force SDL to take over management of pixels. */
+		rv->flags &= ~SDL_PREALLOC;
+		av_free(sqe);
+	}
 
-    return rv;
+	return rv;
 }
 
 
 static int decode_thread(void *arg) {
-    MediaState *ms = (MediaState *) arg;
+	MediaState *ms = (MediaState *) arg;
 
-    int err;
+	int err;
 
-    AVFormatContext *ctx = avformat_alloc_context();
-    if (ctx == NULL) {
-                                                   
-        goto finish;
-    }
-    ms->ctx = ctx;
+	AVFormatContext *ctx = avformat_alloc_context();
+	if (ctx == NULL) {
+												   
+		goto finish;
+	}
+	ms->ctx = ctx;
 
-    AVIOContext *io_context = rwops_open(ms->rwops);
-    if (io_context == NULL) {
-                                               
-        goto finish;
-    }
-    ctx->pb = io_context;
+	AVIOContext *io_context = rwops_open(ms->rwops);
+	if (io_context == NULL) {
+											   
+		goto finish;
+	}
+	ctx->pb = io_context;
 
-    err = avformat_open_input(&ctx, ms->filename, NULL, NULL);
-    if (err) {
-                                               
-        avformat_free_context(ctx);
-        ms->ctx = NULL;
-        goto finish;
-    }
+	err = avformat_open_input(&ctx, ms->filename, NULL, NULL);
+	if (err) {
+											   
+		avformat_free_context(ctx);
+		ms->ctx = NULL;
+		goto finish;
+	}
 
-    err = avformat_find_stream_info(ctx, NULL);
-    if (err) {
-                                                     
-        goto finish;
-    }
+	err = avformat_find_stream_info(ctx, NULL);
+	if (err) {
+													 
+		goto finish;
+	}
 
 
-    ms->video_stream = -1;
-    ms->audio_stream = -1;
+	ms->video_stream = -1;
+	ms->audio_stream = -1;
 
-    for (unsigned int i = 0; i < ctx->nb_streams; i++) {
-        if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            if (ms->want_video && ms->video_stream == -1) {
-                ms->video_stream = i;										   
-            }
-        }
+	for (unsigned int i = 0; i < ctx->nb_streams; i++) {
+		if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+			if (ms->want_video && ms->video_stream == -1) {
+				ms->video_stream = i;										   
+			}
+		}
 
-        if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            if (ms->audio_stream == -1) {
-                ms->audio_stream = i;										   
-            }
-        }
-    }
+		if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+			if (ms->audio_stream == -1) {
+				ms->audio_stream = i;										   
+			}
+		}
+	}
 
-    ms->video_context = find_context(ctx, ms->video_stream);
-    ms->audio_context = find_context(ctx, ms->audio_stream);
-    ms->swr = swr_alloc();
-    if (ms->swr == NULL) {
-                                                
-        goto finish;
-    }
+	ms->video_context = find_context(ctx, ms->video_stream);
+	ms->audio_context = find_context(ctx, ms->audio_stream);
+	ms->swr = swr_alloc();
+	if (ms->swr == NULL) {
+												
+		goto finish;
+	}
 
-    // Compute the number of samples we need to play back.
-    if (ms->audio_duration < 0) {
-        if (av_fmt_ctx_get_duration_estimation_method(ctx) != AVFMT_DURATION_FROM_BITRATE) {
+	// Compute the number of samples we need to play back.
+	if (ms->audio_duration < 0) {
+		if (av_fmt_ctx_get_duration_estimation_method(ctx) != AVFMT_DURATION_FROM_BITRATE) {
 
-            long long duration = ((long long) ctx->duration) * audio_sample_rate;
-            ms->audio_duration = (unsigned int) (duration /  AV_TIME_BASE);
+			long long duration = ((long long) ctx->duration) * audio_sample_rate;
+			ms->audio_duration = (unsigned int) (duration /  AV_TIME_BASE);
 
-            ms->total_duration = 1.0 * ctx->duration / AV_TIME_BASE;
+			ms->total_duration = 1.0 * ctx->duration / AV_TIME_BASE;
 
-            // Check that the duration is reasonable (between 0s and 3600s). If not,
-            // reject it.
-            if (ms->audio_duration < 0 || ms->audio_duration > 3600 * audio_sample_rate) {
-                ms->audio_duration = -1;
-            }
-            ms->audio_duration -= (unsigned int) (ms->skip * audio_sample_rate);
-        } else {
-            ms->audio_duration = -1;
-        }
-    }
+			// Check that the duration is reasonable (between 0s and 3600s). If not,
+			// reject it.
+			if (ms->audio_duration < 0 || ms->audio_duration > 3600 * audio_sample_rate) {
+				ms->audio_duration = -1;
+			}
+			ms->audio_duration -= (unsigned int) (ms->skip * audio_sample_rate);
+		} else {
+			ms->audio_duration = -1;
+		}
+	}
 
-    if (ms->skip != 0.0) {													   
-        av_seek_frame(ctx, -1, (int64_t) (ms->skip * AV_TIME_BASE), AVSEEK_FLAG_BACKWARD);
-    }
+	if (ms->skip != 0.0) {													   
+		av_seek_frame(ctx, -1, (int64_t) (ms->skip * AV_TIME_BASE), AVSEEK_FLAG_BACKWARD);
+	}
 
-                                                                                                                                                                      
+																																									  
     if (!ms->video_finished) {													   
         decode_video(ms);
     }
 
-                                                                                                                                                                
+																																								
     if (!ms->audio_finished) {												   
         decode_audio(ms);
     }
 
-    while (!ms->quit) {
+	while (!ms->quit) {
 
-        if (! ms->audio_finished) {
-            decode_audio(ms);
-        }
+		if (! ms->audio_finished) {
+			decode_audio(ms);
+		}
 
-        if (! ms->video_finished) {
-            decode_video(ms);
-        }
+		if (! ms->video_finished) {
+			decode_video(ms);
+		}
 
-        SDL_LockMutex(ms->lock);
+		SDL_LockMutex(ms->lock);
 
-        if (!ms->ready) {
-            ms->ready = 1;										   
-            SDL_CondBroadcast(ms->cond);
-        }
+		if (!ms->ready) {
+			ms->ready = 1;										   
+			SDL_CondBroadcast(ms->cond);
+		}
 
-        if (!(ms->needs_decode || ms->quit)) {							   
-            SDL_CondWait(ms->cond, ms->lock);
-        }
+		if (!(ms->needs_decode || ms->quit)) {							   
+			SDL_CondWait(ms->cond, ms->lock);
+		}
 
-        ms->needs_decode = 0;
-        SDL_UnlockMutex(ms->lock);
-    }
+		ms->needs_decode = 0;
+		SDL_UnlockMutex(ms->lock);
+	}
 
 
 finish:
-    /* Data used by the decoder should be freed here, while data shared with
-     * the readers should be freed in media_close.
-     */
-    SDL_LockMutex(ms->lock);
-    /* Ensures that every stream becomes ready. */
-    if (!ms->ready) {
-        ms->ready = 1;
-        SDL_CondBroadcast(ms->cond);
-    }
+	/* Data used by the decoder should be freed here, while data shared with
+	 * the readers should be freed in media_close.
+	 */
+	SDL_LockMutex(ms->lock);
+	/* Ensures that every stream becomes ready. */
+	if (!ms->ready) {
+		ms->ready = 1;
+		SDL_CondBroadcast(ms->cond);
+	}
 
-    while (!ms->quit) {
-        SDL_CondWait(ms->cond, ms->lock);
-    }
-    SDL_UnlockMutex(ms->lock);											 
-    deallocate(ms);
-    return 0;
+	while (!ms->quit) {
+		SDL_CondWait(ms->cond, ms->lock);
+	}
+	SDL_UnlockMutex(ms->lock);											 
+	deallocate(ms);
+	return 0;
 }
 
 
 void media_read_sync_finish(struct MediaState *ms) {
-    SDL_LockMutex(ms->lock);									   
-    if (!ms->ready) {
-        ms->ready = 1;
-        SDL_CondBroadcast(ms->cond);
-    }
+	SDL_LockMutex(ms->lock);									   
+	if (!ms->ready) {
+		ms->ready = 1;
+		SDL_CondBroadcast(ms->cond);
+	}
 
-    while (!ms->quit) {
-        /* SDL_CondWait(ms->cond, ms->lock); */
-    }
-    SDL_UnlockMutex(ms->lock);
-    deallocate(ms);
+	while (!ms->quit) {
+		/* SDL_CondWait(ms->cond, ms->lock); */
+	}
+	SDL_UnlockMutex(ms->lock);
+	deallocate(ms);
 }
 
 
 static int decode_sync_start(void *arg) {
-                                             
-    MediaState *ms = (MediaState *) arg;
+											 
+	MediaState *ms = (MediaState *) arg;
 
-    int err;
+	int err;
 
-    AVFormatContext *ctx = avformat_alloc_context();
-    if (ctx == NULL) {
-        media_read_sync_finish(ms);
-    }
-    ms->ctx = ctx;
+	AVFormatContext *ctx = avformat_alloc_context();
+	if (ctx == NULL) {
+		media_read_sync_finish(ms);
+	}
+	ms->ctx = ctx;
 
-    AVIOContext *io_context = rwops_open(ms->rwops);
-    if (io_context == NULL) {
-        media_read_sync_finish(ms);
-    }
-    ctx->pb = io_context;
+	AVIOContext *io_context = rwops_open(ms->rwops);
+	if (io_context == NULL) {
+		media_read_sync_finish(ms);
+	}
+	ctx->pb = io_context;
 
-    err = avformat_open_input(&ctx, ms->filename, NULL, NULL);
-    if (err) {
-        avformat_free_context(ctx);
-        ms->ctx = NULL;
-        media_read_sync_finish(ms);
-    }
+	err = avformat_open_input(&ctx, ms->filename, NULL, NULL);
+	if (err) {
+		avformat_free_context(ctx);
+		ms->ctx = NULL;
+		media_read_sync_finish(ms);
+	}
 
-    err = avformat_find_stream_info(ctx, NULL);
-    if (err) {
-        media_read_sync_finish(ms);
-    }
+	err = avformat_find_stream_info(ctx, NULL);
+	if (err) {
+		media_read_sync_finish(ms);
+	}
 
 
-    ms->video_stream = -1;
-    ms->audio_stream = -1;
+	ms->video_stream = -1;
+	ms->audio_stream = -1;
 
-    for (unsigned int i = 0; i < ctx->nb_streams; i++) {
-        if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            if (ms->want_video && ms->video_stream == -1) {
-                ms->video_stream = i;
-            }
-        }
+	for (unsigned int i = 0; i < ctx->nb_streams; i++) {
+		if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+			if (ms->want_video && ms->video_stream == -1) {
+				ms->video_stream = i;
+			}
+		}
 
-        if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            if (ms->audio_stream == -1) {
-                ms->audio_stream = i;
-            }
-        }
-    }
+		if (ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+			if (ms->audio_stream == -1) {
+				ms->audio_stream = i;
+			}
+		}
+	}
 
-    ms->video_context = find_context(ctx, ms->video_stream);
-    ms->audio_context = find_context(ctx, ms->audio_stream);
+	ms->video_context = find_context(ctx, ms->video_stream);
+	ms->audio_context = find_context(ctx, ms->audio_stream);
 
-    ms->swr = swr_alloc();
-    if (ms->swr == NULL) {
-        media_read_sync_finish(ms);
-    }
+	ms->swr = swr_alloc();
+	if (ms->swr == NULL) {
+		media_read_sync_finish(ms);
+	}
 
-    // Compute the number of samples we need to play back.
-    if (ms->audio_duration < 0) {
-        if (av_fmt_ctx_get_duration_estimation_method(ctx) != AVFMT_DURATION_FROM_BITRATE) {
+	// Compute the number of samples we need to play back.
+	if (ms->audio_duration < 0) {
+		if (av_fmt_ctx_get_duration_estimation_method(ctx) != AVFMT_DURATION_FROM_BITRATE) {
 
-            long long duration = ((long long) ctx->duration) * audio_sample_rate;
-            ms->audio_duration = (unsigned int) (duration /  AV_TIME_BASE);
+			long long duration = ((long long) ctx->duration) * audio_sample_rate;
+			ms->audio_duration = (unsigned int) (duration /  AV_TIME_BASE);
 
-            ms->total_duration = 1.0 * ctx->duration / AV_TIME_BASE;
+			ms->total_duration = 1.0 * ctx->duration / AV_TIME_BASE;
 
-            // Check that the duration is reasonable (between 0s and 3600s). If not,
-            // reject it.
-            if (ms->audio_duration < 0 || ms->audio_duration > 3600 * audio_sample_rate) {
-                ms->audio_duration = -1;
-            }
-            ms->audio_duration -= (unsigned int) (ms->skip * audio_sample_rate);
-        } else {
-            ms->audio_duration = -1;
-        }
-    }
+			// Check that the duration is reasonable (between 0s and 3600s). If not,
+			// reject it.
+			if (ms->audio_duration < 0 || ms->audio_duration > 3600 * audio_sample_rate) {
+				ms->audio_duration = -1;
+			}
+			ms->audio_duration -= (unsigned int) (ms->skip * audio_sample_rate);
+		} else {
+			ms->audio_duration = -1;
+		}
+	}
 
-    if (ms->skip != 0.0) {
-        av_seek_frame(ctx, -1, (int64_t) (ms->skip * AV_TIME_BASE), AVSEEK_FLAG_BACKWARD);
-    }
-    return 0;
+	if (ms->skip != 0.0) {
+		av_seek_frame(ctx, -1, (int64_t) (ms->skip * AV_TIME_BASE), AVSEEK_FLAG_BACKWARD);
+	}
+	return 0;
 }
 
 
 void media_read_sync(struct MediaState *ms) {			  
-    if (!ms->quit) {																								 
-        if (! ms->audio_finished) {
-            decode_audio(ms);
-        }
+	if (!ms->quit) {																								 
+		if (! ms->audio_finished) {
+			decode_audio(ms);
+		}
 
-        if (! ms->video_finished) {
-            decode_video(ms);
-        }
+		if (! ms->video_finished) {
+			decode_video(ms);
+		}
 
-        SDL_LockMutex(ms->lock);
+		SDL_LockMutex(ms->lock);
 
-        if (!ms->ready) {
-            ms->ready = 1;
-            SDL_CondBroadcast(ms->cond);
-        }
+		if (!ms->ready) {
+			ms->ready = 1;
+			SDL_CondBroadcast(ms->cond);
+		}
 
-        if (!(ms->needs_decode || ms->quit)) {
-            /* SDL_CondWait(ms->cond, ms->lock); */
-        }
+		if (!(ms->needs_decode || ms->quit)) {
+			/* SDL_CondWait(ms->cond, ms->lock); */
+		}
 
-        ms->needs_decode = 0;
-        SDL_UnlockMutex(ms->lock);
-    }
+		ms->needs_decode = 0;
+		SDL_UnlockMutex(ms->lock);
+	}
 }
 
 
@@ -1508,7 +1507,6 @@ int media_read_audio(struct MediaState *ms, Uint8 *stream, int len) {
     return rv;
 }
 
-/* Функция, отсутствовавшая в новом файле, но необходимая для линковки */
 void media_wait_ready(struct MediaState *ms) {
 #ifndef __EMSCRIPTEN__
     SDL_LockMutex(ms->lock);
@@ -1521,13 +1519,9 @@ void media_wait_ready(struct MediaState *ms) {
 #endif
 }
 
-int media_is_ready(struct MediaState *ms) {
-    return ms->ready;								   			 
-}
-
 
 double media_duration(MediaState *ms) {														  
-    return ms->total_duration;
+	return ms->total_duration;
 }
 
 void media_start(MediaState *ms) {
@@ -1535,9 +1529,9 @@ void media_start(MediaState *ms) {
     decode_sync_start(ms);
 #else
     char buf[1024];
-    snprintf(buf, 1024, "decode: %s", ms->filename);												  
-    SDL_Thread *t = SDL_CreateThread(decode_thread, buf, (void *) ms);
-    ms->thread = t;
+	snprintf(buf, 1024, "decode: %s", ms->filename);												  
+	SDL_Thread *t = SDL_CreateThread(decode_thread, buf, (void *) ms);
+	ms->thread = t;
 #endif
 }
 
@@ -1545,33 +1539,33 @@ void media_start(MediaState *ms) {
 MediaState *media_open(SDL_RWops *rwops, const char *filename) {
     deallocate_deferred();
     MediaState *ms = av_calloc(1, sizeof(MediaState));
-    if (ms == NULL) {									   
-        return NULL;
-    }
-                
+	if (ms == NULL) {									   
+		return NULL;
+	}
+				
     ms->first_frame_shown = 0;
-    ms->filename = av_strdup(filename);
-    if (ms->filename == NULL) {										  
-        deallocate(ms);
-        return NULL;
-    }
-    ms->rwops = rwops;
+	ms->filename = av_strdup(filename);
+	if (ms->filename == NULL) {										  
+		deallocate(ms);
+		return NULL;
+	}
+	ms->rwops = rwops;
 
 #ifndef __EMSCRIPTEN__
-    ms->cond = SDL_CreateCond();
-    if (ms->cond == NULL) {										 
-        deallocate(ms);
-        return NULL;
-    }
-    ms->lock = SDL_CreateMutex();
-    if (ms->lock == NULL) {						
-        deallocate(ms);
-        return NULL;
-    }
+	ms->cond = SDL_CreateCond();
+	if (ms->cond == NULL) {										 
+		deallocate(ms);
+		return NULL;
+	}
+	ms->lock = SDL_CreateMutex();
+	if (ms->lock == NULL) {						
+		deallocate(ms);
+		return NULL;
+	}
 #endif
-    ms->audio_duration = -1;
-    ms->frame_drops = 1;									 
-    return ms;
+	ms->audio_duration = -1;
+	ms->frame_drops = 1;									 
+	return ms;
 }
 
 /**
@@ -1585,22 +1579,22 @@ MediaState *media_open(SDL_RWops *rwops, const char *filename) {
  *    already. If 0, the stream plays until its natural end.
  */
 void media_start_end(MediaState *ms, double start, double end) {													   
-    ms->skip = start;
-    if (end >= 0) {
-        if (end < start) {
-            ms->audio_duration = 0;
-        } else {
-            ms->audio_duration = (int) ((end - start) * audio_sample_rate);
-        }
-    }
+	ms->skip = start;
+	if (end >= 0) {
+		if (end < start) {
+			ms->audio_duration = 0;
+		} else {
+			ms->audio_duration = (int) ((end - start) * audio_sample_rate);
+		}
+	}
 }
 
 /**
  * Marks the channel as having video.
  */
 void media_want_video(MediaState *ms, int video) {									 
-    ms->want_video = 1;
-    ms->frame_drops = (video != 2);
+	ms->want_video = 1;
+	ms->frame_drops = (video != 2);
 }
 
 void media_pause(MediaState *ms, int pause) {							
@@ -1639,14 +1633,14 @@ void media_close(MediaState *ms) {
     deallocate_deferred();
 }
 
-                                                                
+																
 void media_advance_time(void) {
     current_time = SDL_GetTicks() / 1000.0;
 }
 
 void media_sample_surfaces(SDL_Surface *rgb, SDL_Surface *rgba) {
-    rgb_surface = rgb;
-    rgba_surface = rgba;								  
+	rgb_surface = rgb;
+	rgba_surface = rgba;								  
 }
 
 void media_init(int rate, int status, int equal_mono) {
