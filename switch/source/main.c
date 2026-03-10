@@ -16,7 +16,8 @@ static PyObject* commitsave(PyObject* self, PyObject* args)
     s64 total_entries=0;
     Result rc=0;
     
-    fsdevCommitDevice("save");
+    if (fsdevGetDeviceFileSystem("save"))
+        fsdevCommitDevice("save");
     fsFsGetTotalSpace(FsSave, "/", &total_size);
     fsFsGetFreeSpace(FsSave, "/", &free_size);
     if (free_size < 0x800000) {
@@ -41,7 +42,26 @@ static PyObject* commitsave(PyObject* self, PyObject* args)
     }
     return Py_None;
 }
+static PyObject* py_nx_sleep(PyObject* self, PyObject* args) {
+    double seconds;
+    if (!PyArg_ParseTuple(args, "d", &seconds))
+        return NULL;
 
+    // преобразуем секунды в наносекунды
+    uint64_t ns = (uint64_t)(seconds * 1000000000ULL);
+
+    // Отпускаем GIL, чтобы другие Python-потоки могли выполняться
+    Py_BEGIN_ALLOW_THREADS
+    svcSleepThread(ns);
+    Py_END_ALLOW_THREADS
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef NxMethods[] = {
+    {"sleep", py_nx_sleep, METH_VARARGS, "Sleep for given seconds using libnx"},
+    {NULL, NULL, 0, NULL}
+};
 static PyObject* startboost(PyObject* self, PyObject* args)
 {
     appletSetCpuBoostMode(ApmPerformanceMode_Boost);
@@ -71,6 +91,9 @@ static PyMethodDef myMethods[] = {
 PyMODINIT_FUNC init_otrh_libnx(void)
 {
     Py_InitModule("_otrhlibnx", myMethods);
+}
+PyMODINIT_FUNC init_nx(void) {
+    Py_InitModule("_nx", NxMethods);
 }
 
 PyMODINIT_FUNC initpygame_sdl2_color();
@@ -238,7 +261,8 @@ void userAppInit()
 
 void userAppExit()
 {
-    fsdevCommitDevice("save");
+    if (fsdevGetDeviceFileSystem("save"))
+        fsdevCommitDevice("save");
     fsdevUnmountDevice("save");
     socketExit();
     romfsExit();
@@ -267,6 +291,7 @@ void show_error(const char* message, int exit)
         first_line[end - message] = '\0';
     }
     ErrorSystemConfig c;
+    PyErr_Print();
     errorSystemCreate(&c, (const char*)first_line, message);
     errorSystemShow(&c);
     if (exit == 1) {
@@ -281,7 +306,8 @@ static void on_applet_hook(AppletHookType hook, void *param)
    switch (hook)
    {
       case AppletHookType_OnExitRequest:
-        fsdevCommitDevice("save");
+        if (fsdevGetDeviceFileSystem("save"))
+            fsdevCommitDevice("save");
         svcSleepThread(1500000000ULL);
         appletUnlockExit();
         break;
@@ -309,7 +335,7 @@ int main(int argc, char* argv[])
     static struct _inittab builtins[] = {
 
         {"_otrhlibnx", init_otrh_libnx},
-
+	    {"_nx", init_nx},
         {"pygame_sdl2.color", initpygame_sdl2_color},
         {"pygame_sdl2.controller", initpygame_sdl2_controller},
         {"pygame_sdl2.display", initpygame_sdl2_display},
