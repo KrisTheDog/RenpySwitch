@@ -75,7 +75,7 @@ pip2 install future six typing requests ecdsa pefile==2019.4.18 Cython==0.29.36 
 
 #curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/devkitpro-pkgbuild-helpers-2.2.4-2-any.pkg.tar.xz
 curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/python27-switch.zip
-#curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/switch-libfribidi-1.0.12-1-any.pkg.tar.xz
+curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 
 # Устанавливаем современные пакеты взамен старого devkitpro-pkgbuild-helpers
 # switch-cmake предоставит нужный switch.cmake
@@ -84,14 +84,15 @@ dkp-pacman -S --noconfirm switch-cmake dkp-toolchain-vars
 
 # Удаляем строку установки старого пакета
 # dkp-pacman -U --noconfirm devkitpro-pkgbuild-helpers-2.2.4-2-any.pkg.tar.xz
-#dkp-pacman -U --noconfirm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
+dkp-pacman -U --noconfirm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 unzip -qq python27-switch.zip -d $DEVKITPRO/portlibs/switch
 
 #rm devkitpro-pkgbuild-helpers-2.2.4-2-any.pkg.tar.xz
-#rm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
+rm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 rm python27-switch.zip
 
-
+# Создаем симлинк со старого имени на новое, чтобы скрипты и CMake нашли его
+ln -sf $DEVKITPRO/cmake/Switch.cmake $DEVKITPRO/switch.cmake
 
 /bin/bash -c 'sed -i'"'"'.bak'"'"' '"'"'s/set(CMAKE_EXE_LINKER_FLAGS_INIT "/set(CMAKE_EXE_LINKER_FLAGS_INIT "-fPIC /'"'"' $DEVKITPRO/switch.cmake'
 
