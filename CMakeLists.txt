@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.10)
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     if(DEFINED ENV{DEVKITPRO})
         set(DEVKITPRO $ENV{DEVKITPRO})
-        # Исправлен путь на современный
         set(CMAKE_TOOLCHAIN_FILE "$ENV{DEVKITPRO}/cmake/Switch.cmake" CACHE PATH "toolchain file")
     else()
         message(FATAL_ERROR "Please define DEVKITPRO to point to your SDK path!")
@@ -116,10 +115,6 @@ set(SOURCES
 
 find_package(PkgConfig REQUIRED)
 
-# ВСЕ СТАНДАРТНЫЕ КОНСТАНТЫ pkgcfg_lib_... УДАЛЕНЫ!
-# Современный CMake и DevkitPro подтягивают пути к библиотекам автоматически
-# через IMPORTED_TARGET.
-
 pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
 pkg_check_modules(FREETYPE2 REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(GLAPI REQUIRED IMPORTED_TARGET glapi)
@@ -156,4 +151,22 @@ target_link_libraries(${PROJECT_NAME}
     PkgConfig::GLESV2
     PkgConfig::LIBAVCODEC
     PkgConfig::LIBAVFILTER
-    PkgConfig::
+    PkgConfig::LIBAVFORMAT
+    PkgConfig::LIBAVUTIL
+    PkgConfig::LIBDRM_NOUVEAU
+    PkgConfig::LIBSWRESAMPLE
+    PkgConfig::LIBSWSCALE
+    PkgConfig::SDL2
+    PkgConfig::SDL2_GFX
+    PkgConfig::SDL2_IMAGE
+    PkgConfig::SDL2_MIXER
+    PkgConfig::SDL2_TTF
+    PkgConfig::ZLIB
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDES})
+
+# Упрощенная и безопасная запись флагов компиляции
+target_compile_options(${PROJECT_NAME} PRIVATE ${C_FLAGS} ${OPTIMIZATION_FLAGS})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
