@@ -3,7 +3,7 @@ set -e
 export DEVKITPRO=/opt/devkitpro
 export RENPY_VER=7.6.3
 export PYGAME_SDL2_VER=2.1.0
-
+INITIAL_DIR=$(pwd)
 apt-get -y update
 apt-get -y upgrade
 
@@ -53,7 +53,7 @@ ln -sf /usr/local/bin/pip2.7 /usr/local/bin/pip2
 # Очищаем временные файлы сборки
 rm -rf /tmp/openssl-1.1.1w /tmp/Python-2.7.18
 
-cd /
+cd $INITIAL_DIR
 
 # Проверка
 python2 --version
