@@ -10,58 +10,14 @@ apt-get -y upgrade
 apt -y install build-essential checkinstall
 apt -y install libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev
 
-#apt -y install python2 python2-dev
-#python2 --version
-#curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py
-#python2 get-pip.py
-#pip2 --version 
-
-
-
-
-# Устанавливаем зависимости для сборки Python и OpenSSL 1.1
-apt -y install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev
-
-# Скачиваем и собираем OpenSSL 1.1 (иначе pip2 не сможет скачивать пакеты из-за несовместимости с OpenSSL 3.x)
-cd /tmp
-wget https://www.openssl.org/source/openssl-1.1.1w.tar.gz
-tar -xzvf openssl-1.1.1w.tar.gz
-cd openssl-1.1.1w
-./config --prefix=/usr/local/openssl-1.1 --openssldir=/usr/local/openssl-1.1 shared
-make -j$(nproc)
-make install
-echo "/usr/local/openssl-1.1/lib" > /etc/ld.so.conf.d/openssl-1.1.conf
-ldconfig
-
-# Скачиваем и собираем Python 2.7.18 (последняя версия Python 2)
-cd /tmp
-wget https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tgz
-tar -xzf Python-2.7.18.tgz
-cd Python-2.7.18
-
-# Указываем пути к собранному OpenSSL 1.1
-export CFLAGS="-I/usr/local/openssl-1.1/include"
-export LDFLAGS="-L/usr/local/openssl-1.1/lib"
-./configure --enable-optimizations --prefix=/usr/local
-make -j$(nproc)
-make altinstall
-
-# Создаем симлинки, чтобы скрипт видел команды python2 и pip2
-ln -sf /usr/local/bin/python2.7 /usr/local/bin/python2
-ln -sf /usr/local/bin/pip2.7 /usr/local/bin/pip2
-
-# Очищаем временные файлы сборки
-rm -rf /tmp/openssl-1.1.1w /tmp/Python-2.7.18
-
-cd /
-
-# Проверка
+apt -y install python2 python2-dev
 python2 --version
-
-# Установка pip
 curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py
 python2 get-pip.py
 pip2 --version 
+
+
+
 
 
 
