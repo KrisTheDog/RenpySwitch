@@ -20,6 +20,8 @@ python2 setup.py install_headers
 python2 setup.py install
 popd
 
+cp -rf ffmedia.c renpy-source/module
+
 pushd renpy-source/module
 RENPY_DEPS_INSTALL=/usr/lib/x86_64-linux-gnu:/usr:/usr/local python2 setup.py build
 RENPY_DEPS_INSTALL=/usr/lib/x86_64-linux-gnu:/usr:/usr/local python2 setup.py install
