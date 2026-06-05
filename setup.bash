@@ -81,16 +81,12 @@ curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/python27-s
 # Устанавливаем ВСЁ необходимое для сборки под Switch (компилятор, cmake, sdl2, libfribidi и т.д.)
 # Это заменяет ручную установку devkitpro-pkgbuild-helpers и switch-libfribidi
 dkp-pacman -S --noconfirm switch-dev
-
+dkp-pacman -U --noconfirm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 # Устанавливаем распакованный Python 2.7 для Switch
 unzip -qq python27-switch.zip -d $DEVKITPRO/portlibs/switch
 rm python27-switch.zip
 
-# Создаем симлинк для совместимости старого CMakeLists.txt с новыми путями DevkitPro
-ln -sf $DEVKITPRO/cmake/Switch.cmake $DEVKITPRO/switch.cmake
 
-# Патчим CMake файл, добавляя флаг -fPIC
-sed -i.bak 's/set(CMAKE_EXE_LINKER_FLAGS_INIT "/set(CMAKE_EXE_LINKER_FLAGS_INIT "-fPIC /' $DEVKITPRO/switch.cmake
 
 
 curl -LOC - https://www.renpy.org/dl/$RENPY_VER/pygame_sdl2-$PYGAME_SDL2_VER+renpy$RENPY_VER.tar.gz
