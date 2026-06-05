@@ -97,6 +97,32 @@ cp -rf $INITIAL_DIR/subprocess.pyo renpy_sdk/renpy-$RENPY_VER-sdk/lib/python2.7
 # =========================================================
 pushd renpy-source
 patch -p1 < ../renpy.patch
+
+# === Патчим ffmedia.c для совместимости с современным FFmpeg (API 5.1+) ===
+# 1. Добавляем const в функцию записи
+sed -i 's/static int rwops_write(void \*opaque, uint8_t \*buf/static int rwops_write(void *opaque, const uint8_t *buf/g' module/ffmedia.c
+
+# 2. Заменяем устаревшее присвоение channel_layout на современный AVChannelLayout
+sed -i 's/converted_frame->channel_layout = AV_CH_LAYOUT_STEREO;/converted_frame->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;/g' module/ffmedia.c
+
+# 3. Заменяем проверку channel_layout на проверку порядка каналов
+sed -i 's/!ms->audio_decode_frame->channel_layout/ms->audio_decode_frame->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC/g' module/ffmedia.c
+
+# 4. Заменяем старую функцию получения дефолтного layout на новую
+sed -i 's/ms->audio_decode_frame->channel_layout = av_get_default_channel_layout(ms->audio_decode_frame->channels);/av_channel_layout_default(\&ms->audio_decode_frame->ch_layout, ms->audio_decode_frame->ch_layout.nb_channels);/g' module/ffmedia.c
+
+# 5. Заменяем обращение к channels на nb_channels
+sed -i 's/ms->audio_decode_frame->channels == 1/ms->audio_decode_frame->ch_layout.nb_channels == 1/g' module/ffmedia.c
+
+# 6. Обновляем вызов swr_alloc_set_opts на swr_alloc_set_opts2
+sed -i 's/swr_alloc_set_opts(/swr_alloc_set_opts2(/g' module/ffmedia.c
+sed -i 's/ms->swr = swr_alloc_set_opts2(ms->swr,/swr_alloc_set_opts2(\&ms->swr,/g' module/ffmedia.c
+
+# 7. Передаем указатели на ch_layout вместо значений channel_layout
+sed -i 's/converted_frame->channel_layout,/\&converted_frame->ch_layout,/g' module/ffmedia.c
+sed -i 's/ms->audio_decode_frame->channel_layout,/\&ms->audio_decode_frame->ch_layout,/g' module/ffmedia.c
+# ==========================================================================
+
 pushd module
 rm -rf gen gen-static
 popd
