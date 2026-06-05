@@ -77,8 +77,8 @@ curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/devkitpro-
 curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/python27-switch.zip
 curl -LOC - https://github.com/knautilus/Utils/releases/download/v1.0/switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 
-# Явно удаляем конфликтующий современный пакет (|| true добавлено на случай, если пакета нет, чтобы скрипт не упал)
-dkp-pacman -Rns --noconfirm dkp-meson-scripts || true
+# Явно удаляем конфликтующие современные пакеты (|| true на случай, если какого-то из них нет)
+dkp-pacman -Rns --noconfirm dkp-meson-scripts dkp-toolchain-vars || true
 
 dkp-pacman -U --noconfirm devkitpro-pkgbuild-helpers-2.2.4-2-any.pkg.tar.xz
 dkp-pacman -U --noconfirm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
