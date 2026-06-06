@@ -96,8 +96,13 @@ target_link_libraries(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDES})
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS}>)
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<CONFIG:RELEASE>:${OPTIMIZATION_FLAGS}>)
-target_compile_options(${PROJECT_NAME} PUBLIC $<$<CONFIG:RELWITHDEBINFO>:${OPTIMIZATION_FLAGS}>)
+target_compile_options(${PROJECT_NAME} PRIVATE ${C_FLAGS} ${OPTIMIZATION_FLAGS})
+
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
-# Заменяем ручной вызов elf2nso на стандартную команду DevkitPro
-nx_generate_nso(${PROJECT_NAME})
+add_custom_target(${PROJECT_NAME}.nso ALL
+    COMMAND ${DEVKITPRO}/tools/bin/elf2nso
+        ${PROJECT_NAME}
+        ${PROJECT_NAME}.nso
+    DEPENDS ${PROJECT_NAME}
+)
