@@ -404,11 +404,36 @@ int main(int argc, char* argv[])
 
     int python_result;
 
-    python_result = PyRun_SimpleString("import sys; sys.path = ['romfs:/Contents/lib.zip']");
+    // Устанавливаем путь и патчим os.mkdir / os.makedirs для совместимости со Switch
+    python_result = PyRun_SimpleString(
+        "import sys; sys.path = ['romfs:/Contents/lib.zip']\n"
+        "import os, errno\n"
+        "_orig_mkdir = os.mkdir\n"
+        "def _switch_mkdir(path, mode=0777):\n"
+        "    try:\n"
+        "        _orig_mkdir(path, mode)\n"
+        "    except OSError as e:\n"
+        "        # Игнорируем ENOSYS (88) для файловой системы save:\n"
+        "        if e.errno == errno.ENOSYS and 'save:' in path:\n"
+        "            pass\n"
+        "        else:\n"
+        "            raise\n"
+        "os.mkdir = _switch_mkdir\n"
+        "_orig_makedirs = os.makedirs\n"
+        "def _switch_makedirs(name, mode=0777):\n"
+        "    try:\n"
+        "        _orig_makedirs(name, mode)\n"
+        "    except OSError as e:\n"
+        "        if e.errno == errno.ENOSYS and 'save:' in name:\n"
+        "            pass\n"
+        "        else:\n"
+        "            raise\n"
+        "os.makedirs = _switch_makedirs\n"
+    );
 
     if (python_result == -1)
     {
-        show_error("Could not set the Python path.\n\nThis is an internal error and should not occur during normal usage.", 1);
+        show_error("Could not set the Python path or patch os module.\n\nThis is an internal error and should not occur during normal usage.", 1);
     }
 
 #define x(lib) \
