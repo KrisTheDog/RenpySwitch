@@ -6,6 +6,15 @@
 
 char python_error_buffer[0x400];
 
+
+// Глобальные флаги для корректной очистки SDL
+static bool presplash_sdl_video_initialized = false;
+static bool presplash_window_created = false;
+static bool presplash_renderer_created = false;
+static SDL_Window *presplash_window = NULL;
+static SDL_Renderer *presplash_renderer = NULL;
+
+
 void show_error(const char* message, int exit)
 {
     if (exit == 1) {
@@ -305,52 +314,62 @@ static void on_applet_hook(AppletHookType hook, void *param)
 
 void show_presplash(void)
 {
-    // Инициализируем только видео
+    // 1. Инициализируем видео-подсистему
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
         return;
     }
+    presplash_sdl_video_initialized = true;
     
+    // 2. Инициализируем SDL_image
     int img_flags = IMG_INIT_PNG | IMG_INIT_JPG;
     if (!(IMG_Init(img_flags) & img_flags)) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        presplash_sdl_video_initialized = false;
         return;
     }
     
-    // Создаем полноэкранное окно 1280x720 (ОС Switch автоматически растянет под док/портатив)
-    SDL_Window* presplash_window = SDL_CreateWindow("Presplash", 
-                                              SDL_WINDOWPOS_CENTERED, 
-                                              SDL_WINDOWPOS_CENTERED, 
-                                              1280, 720, 
-                                              SDL_WINDOW_FULLSCREEN);
+    // 3. Создаем окно (1280x720 - нативное разрешение Switch в портативе, ОС сама растянет в доке)
+    presplash_window = SDL_CreateWindow("Presplash", 
+                                        SDL_WINDOWPOS_CENTERED, 
+                                        SDL_WINDOWPOS_CENTERED, 
+                                        1280, 720, 
+                                        SDL_WINDOW_FULLSCREEN);
     
     if (!presplash_window) {
         IMG_Quit();
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        presplash_sdl_video_initialized = false;
         return;
     }
+    presplash_window_created = true;
     
-    SDL_Renderer* presplash_renderer = SDL_CreateRenderer(presplash_window, -1, 
-                                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    // 4. Создаем рендерер (обязательно Accelerated + VSync, как в видео-плеере)
+    presplash_renderer = SDL_CreateRenderer(presplash_window, -1, 
+                                            SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     
     if (!presplash_renderer) {
         SDL_DestroyWindow(presplash_window);
+        presplash_window = NULL;
         IMG_Quit();
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        presplash_sdl_video_initialized = false;
+        presplash_window_created = false;
         return;
     }
+    presplash_renderer_created = true;
     
-    // Окрашиваем экран в черный цвет
+    // 5. Окрашиваем экран в черный цвет
     SDL_SetRenderDrawColor(presplash_renderer, 0, 0, 0, 255);
     SDL_RenderClear(presplash_renderer);
     
-    // Пытаемся загрузить картинку из romfs (папка game)
+    // 6. Пытаемся загрузить картинку
     SDL_Surface* presplash_surface = IMG_Load("romfs:/Contents/game/presplash.png");
     if (!presplash_surface) {
         presplash_surface = IMG_Load("romfs:/Contents/game/presplash.jpg");
     }
 
     if (presplash_surface) {
-        // Если картинка найдена, растягиваем её на весь экран
+        // Растягиваем картинку на весь экран
         SDL_Texture* presplash_texture = SDL_CreateTextureFromSurface(presplash_renderer, presplash_surface);
         if (presplash_texture) {
             SDL_RenderCopy(presplash_renderer, presplash_texture, NULL, NULL);
@@ -362,20 +381,39 @@ void show_presplash(void)
     // Выводим картинку на экран
     SDL_RenderPresent(presplash_renderer);
     
-    // Ждем полсекунды (500,000,000 наносекунд)
+    // 7. Ждем полсекунды (500,000,000 наносекунд)
     svcSleepThread(500000000ULL);
     
-    // Обязательно уничтожаем ресурсы SDL!
-    SDL_DestroyRenderer(presplash_renderer);
-    SDL_DestroyWindow(presplash_window);
+    // ==========================================
+    // КРИТИЧЕСКИ ВАЖНЫЙ БЛОК ОЧИСТКИ (как в video_player_quit)
+    // ==========================================
     
-    // Завершаем SDL_image и видео-подсистему
+    // Уничтожаем рендерер
+    if (presplash_renderer_created && presplash_renderer) {
+        SDL_DestroyRenderer(presplash_renderer);
+        presplash_renderer = NULL;
+        presplash_renderer_created = false;
+    }
+    
+    // Уничтожаем окно
+    if (presplash_window_created && presplash_window) {
+        SDL_DestroyWindow(presplash_window);
+        presplash_window = NULL;
+        presplash_window_created = false;
+    }
+    
+    // Завершаем SDL_image
     IMG_Quit();
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     
-    // ВАЖНО: Даем ОС Switch 100мс на очистку графического контекста.
-    // Без этого Atmosphere может крашнуться при повторной инициализации SDL в Ren'Py.
-    svcSleepThread(500000000ULL); 
+    // Завершаем видео-подсистему
+    if (presplash_sdl_video_initialized) {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        presplash_sdl_video_initialized = false;
+    }
+    
+    // ВАЖНО: Даем ОС Switch 200мс на очистку EGL/NWindow дескрипторов.
+    // Без этой паузы Atmosphere может крашнуться при повторной инициализации SDL в Ren'Py.
+    svcSleepThread(200000000ULL); 
 }
 
 int main(int argc, char* argv[])
