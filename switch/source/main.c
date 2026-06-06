@@ -303,57 +303,90 @@ static void on_applet_hook(AppletHookType hook, void *param)
 }
 
 
+void show_presplash(void)
+{
+    // Инициализируем только видео
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+        return;
+    }
+    
+    int img_flags = IMG_INIT_PNG | IMG_INIT_JPG;
+    if (!(IMG_Init(img_flags) & img_flags)) {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return;
+    }
+    
+    // Создаем полноэкранное окно 1280x720 (ОС Switch автоматически растянет под док/портатив)
+    SDL_Window* presplash_window = SDL_CreateWindow("Presplash", 
+                                              SDL_WINDOWPOS_CENTERED, 
+                                              SDL_WINDOWPOS_CENTERED, 
+                                              1280, 720, 
+                                              SDL_WINDOW_FULLSCREEN);
+    
+    if (!presplash_window) {
+        IMG_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return;
+    }
+    
+    SDL_Renderer* presplash_renderer = SDL_CreateRenderer(presplash_window, -1, 
+                                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    
+    if (!presplash_renderer) {
+        SDL_DestroyWindow(presplash_window);
+        IMG_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return;
+    }
+    
+    // Окрашиваем экран в черный цвет
+    SDL_SetRenderDrawColor(presplash_renderer, 0, 0, 0, 255);
+    SDL_RenderClear(presplash_renderer);
+    
+    // Пытаемся загрузить картинку из romfs (папка game)
+    SDL_Surface* presplash_surface = IMG_Load("romfs:/Contents/game/presplash.png");
+    if (!presplash_surface) {
+        presplash_surface = IMG_Load("romfs:/Contents/game/presplash.jpg");
+    }
+
+    if (presplash_surface) {
+        // Если картинка найдена, растягиваем её на весь экран
+        SDL_Texture* presplash_texture = SDL_CreateTextureFromSurface(presplash_renderer, presplash_surface);
+        if (presplash_texture) {
+            SDL_RenderCopy(presplash_renderer, presplash_texture, NULL, NULL);
+            SDL_DestroyTexture(presplash_texture);
+        }
+        SDL_FreeSurface(presplash_surface);
+    }
+    
+    // Выводим картинку на экран
+    SDL_RenderPresent(presplash_renderer);
+    
+    // Ждем полсекунды (500,000,000 наносекунд)
+    svcSleepThread(500000000ULL);
+    
+    // Обязательно уничтожаем ресурсы SDL!
+    SDL_DestroyRenderer(presplash_renderer);
+    SDL_DestroyWindow(presplash_window);
+    
+    // Завершаем SDL_image и видео-подсистему
+    IMG_Quit();
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    
+    // ВАЖНО: Даем ОС Switch 100мс на очистку графического контекста.
+    // Без этого Atmosphere может крашнуться при повторной инициализации SDL в Ren'Py.
+    svcSleepThread(500000000ULL); 
+}
+
 int main(int argc, char* argv[])
 {
-    // =========================================================
-    // НАТИВНЫЙ PRESPLASH (Показываем картинку или черный экран до старта Python)
-    // =========================================================
-    if (SDL_Init(SDL_INIT_VIDEO) >= 0) {
-        // Создаем полноэкранное окно. Разрешение 1920x1080 в доке, Switch сам сожмет до 720p в портативе
-        SDL_Window* splash_window = SDL_CreateWindow("Presplash", 0, 0, 1920, 1080, SDL_WINDOW_FULLSCREEN);
-        if (splash_window) {
-            SDL_Renderer* splash_renderer = SDL_CreateRenderer(splash_window, -1, SDL_RENDERER_SOFTWARE);
-            if (splash_renderer) {
-                // Окрашиваем экран в черный цвет по умолчанию
-                SDL_SetRenderDrawColor(splash_renderer, 0, 0, 0, 255);
-                SDL_RenderClear(splash_renderer);
-
-                // Пытаемся загрузить картинку из romfs (папка game)
-                SDL_Surface* splash_surface = IMG_Load("romfs:/Contents/game/presplash.png");
-                if (!splash_surface) {
-                    splash_surface = IMG_Load("romfs:/Contents/game/presplash.jpg");
-                }
-
-                if (splash_surface) {
-                    // Если картинка найдена, растягиваем её на весь экран
-                    SDL_Texture* splash_texture = SDL_CreateTextureFromSurface(splash_renderer, splash_surface);
-                    if (splash_texture) {
-                        SDL_RenderCopy(splash_renderer, splash_texture, NULL, NULL);
-                        SDL_DestroyTexture(splash_texture);
-                    }
-                    SDL_FreeSurface(splash_surface);
-                }
-
-                SDL_RenderPresent(splash_renderer);
-
-                // Ждем полсекунды (500,000,000 наносекунд). 
-                // Можете увеличить, например до 1500000000ULL (1.5 секунды)
-                svcSleepThread(500000000ULL);
-
-                SDL_DestroyRenderer(splash_renderer);
-            }
-            SDL_DestroyWindow(splash_window);
-        }
-        // ВАЖНО: Полностью выключаем SDL, чтобы Ren'Py смог запустить её заново без конфликтов
-        SDL_Quit(); 
-    }
-    // =========================================================
-
-
     setenv("MESA_NO_ERROR", "1", 1);
 
     appletLockExit();
     appletHook(&applet_hook_cookie, on_applet_hook, NULL);
+
+    // ПОКАЗЫВАЕМ ЗАСТАВКУ ДО СТАРТА PYTHON
+    show_presplash();
 
     Py_NoSiteFlag = 1;
     Py_IgnoreEnvironmentFlag = 1;
