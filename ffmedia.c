@@ -1516,6 +1516,16 @@ int media_is_ready(struct MediaState *ms) {
     return ms->ready;								   			 
 }
 
+// ДОБАВЬТЕ ЭТУ ФУНКЦИЮ:
+void media_wait_ready(MediaState *ms) {
+    if (!ms) return;
+    SDL_LockMutex(ms->lock);
+    while (!ms->ready) {
+        SDL_CondWait(ms->cond, ms->lock);
+    }
+    SDL_UnlockMutex(ms->lock);
+}
+
 
 double media_duration(MediaState *ms) {														  
     return ms->total_duration;
