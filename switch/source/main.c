@@ -220,42 +220,60 @@ Result createSaveData()
     return fsCreateSaveDataFileSystem(&attr, &crt, &meta);
 }
 
+
 void userAppInit()
 {
-    // fsdevUnmountAll();
-
     Result rc=0;
     PselUserSelectionSettings settings;
     
     rc = svcGetInfo(&cur_progid, InfoType_ProgramId, CUR_PROCESS_HANDLE, 0);
     rc = accountInitialize(AccountServiceType_Application);
     rc = accountGetPreselectedUser(&userID);
+    
     if (R_FAILED(rc)) {
-        s32 count;
-
+        s32 count = 0;
         accountGetUserCount(&count);
 
         if (count > 1) {
-            pselShowUserSelector(&userID, &settings);
-        } else {
-            s32 loadedUsers;
-            AccountUid account_ids[count];
-            accountListAllUsers(account_ids, count, &loadedUsers);
-            userID = account_ids[0];
+            // Если пользователей несколько, показываем селектор
+            rc = pselShowUserSelector(&userID, &settings);
+            if (R_FAILED(rc)) {
+                // Пользователь нажал "Отмена" в селекторе — принудительно берем первого
+                count = 1; 
+            }
+        }
+
+        // Если пользователь всего один, или он отменил выбор — берем первого из списка
+        if (count <= 1 || R_FAILED(rc)) {
+            s32 loadedUsers = 0;
+            AccountUid account_ids[8]; // На Switch максимум 8 пользователей
+            memset(account_ids, 0, sizeof(account_ids));
+            
+            rc = accountListAllUsers(account_ids, 8, &loadedUsers);
+            if (R_SUCCEEDED(rc) && loadedUsers > 0) {
+                userID = account_ids[0]; // Выбираем первого попавшегося
+            }
         }
     }
 
+    // Пытаемся примонтировать сохранения
     if (accountUidIsValid(&userID)) {
         rc = fsdevMountSaveData("save", cur_progid, userID);
         if (R_FAILED(rc)) {
             rc = createSaveData();
             rc = fsdevMountSaveData("save", cur_progid, userID);
         }
+    } else {
+        // Экстренный fallback: если аккаунтов вообще нет (взломанный Switch без созданных юзеров и т.д.)
+        // Пробуем примонтировать без валидного userID (на некоторых кастомках это работает)
+        fsdevMountSaveData("save", cur_progid, userID);
     }
 
     romfsInit();
     socketInitializeDefault();
 }
+
+
 
 void userAppExit()
 {
