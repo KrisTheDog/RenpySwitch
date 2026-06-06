@@ -1,6 +1,8 @@
 #include <switch.h>
 #include <Python.h>
 #include <stdio.h>
+#include <SDL2/SDL.h>       // Добавлено для нативного presplash
+#include <SDL2/SDL_image.h> // Добавлено для загрузки картинок
 
 char python_error_buffer[0x400];
 
@@ -235,28 +237,24 @@ void userAppInit()
         accountGetUserCount(&count);
 
         if (count > 1) {
-            // Если пользователей несколько, показываем селектор
             rc = pselShowUserSelector(&userID, &settings);
             if (R_FAILED(rc)) {
-                // Пользователь нажал "Отмена" в селекторе — принудительно берем первого
                 count = 1; 
             }
         }
 
-        // Если пользователь всего один, или он отменил выбор — берем первого из списка
         if (count <= 1 || R_FAILED(rc)) {
             s32 loadedUsers = 0;
-            AccountUid account_ids[8]; // На Switch максимум 8 пользователей
+            AccountUid account_ids[8];
             memset(account_ids, 0, sizeof(account_ids));
             
             rc = accountListAllUsers(account_ids, 8, &loadedUsers);
             if (R_SUCCEEDED(rc) && loadedUsers > 0) {
-                userID = account_ids[0]; // Выбираем первого попавшегося
+                userID = account_ids[0];
             }
         }
     }
 
-    // Пытаемся примонтировать сохранения
     if (accountUidIsValid(&userID)) {
         rc = fsdevMountSaveData("save", cur_progid, userID);
         if (R_FAILED(rc)) {
@@ -264,8 +262,6 @@ void userAppInit()
             rc = fsdevMountSaveData("save", cur_progid, userID);
         }
     } else {
-        // Экстренный fallback: если аккаунтов вообще нет (взломанный Switch без созданных юзеров и т.д.)
-        // Пробуем примонтировать без валидного userID (на некоторых кастомках это работает)
         fsdevMountSaveData("save", cur_progid, userID);
     }
 
@@ -309,6 +305,51 @@ static void on_applet_hook(AppletHookType hook, void *param)
 
 int main(int argc, char* argv[])
 {
+    // =========================================================
+    // НАТИВНЫЙ PRESPLASH (Показываем картинку или черный экран до старта Python)
+    // =========================================================
+    if (SDL_Init(SDL_INIT_VIDEO) >= 0) {
+        // Создаем полноэкранное окно. Разрешение 1920x1080 в доке, Switch сам сожмет до 720p в портативе
+        SDL_Window* splash_window = SDL_CreateWindow("Presplash", 0, 0, 1920, 1080, SDL_WINDOW_FULLSCREEN);
+        if (splash_window) {
+            SDL_Renderer* splash_renderer = SDL_CreateRenderer(splash_window, -1, SDL_RENDERER_SOFTWARE);
+            if (splash_renderer) {
+                // Окрашиваем экран в черный цвет по умолчанию
+                SDL_SetRenderDrawColor(splash_renderer, 0, 0, 0, 255);
+                SDL_RenderClear(splash_renderer);
+
+                // Пытаемся загрузить картинку из romfs (папка game)
+                SDL_Surface* splash_surface = IMG_Load("romfs:/Contents/game/presplash.png");
+                if (!splash_surface) {
+                    splash_surface = IMG_Load("romfs:/Contents/game/presplash.jpg");
+                }
+
+                if (splash_surface) {
+                    // Если картинка найдена, растягиваем её на весь экран
+                    SDL_Texture* splash_texture = SDL_CreateTextureFromSurface(splash_renderer, splash_surface);
+                    if (splash_texture) {
+                        SDL_RenderCopy(splash_renderer, splash_texture, NULL, NULL);
+                        SDL_DestroyTexture(splash_texture);
+                    }
+                    SDL_FreeSurface(splash_surface);
+                }
+
+                SDL_RenderPresent(splash_renderer);
+
+                // Ждем полсекунды (500,000,000 наносекунд). 
+                // Можете увеличить, например до 1500000000ULL (1.5 секунды)
+                svcSleepThread(500000000ULL);
+
+                SDL_DestroyRenderer(splash_renderer);
+            }
+            SDL_DestroyWindow(splash_window);
+        }
+        // ВАЖНО: Полностью выключаем SDL, чтобы Ren'Py смог запустить её заново без конфликтов
+        SDL_Quit(); 
+    }
+    // =========================================================
+
+
     setenv("MESA_NO_ERROR", "1", 1);
 
     appletLockExit();
@@ -322,7 +363,7 @@ int main(int argc, char* argv[])
 
     static struct _inittab builtins[] = {
 
-        {"_otrhlibnx", init_otrh_libnx},
+        {"_otrh_libnx", init_otrh_libnx},
 
         {"pygame_sdl2.color", initpygame_sdl2_color},
         {"pygame_sdl2.controller", initpygame_sdl2_controller},
@@ -427,57 +468,32 @@ int main(int argc, char* argv[])
         "import sys; sys.path = ['romfs:/Contents/lib.zip']\n"
         "import os, errno, io, __builtin__\n"
         "\n"
+        "SAVE_MOUNTED = os.path.isdir('save:/')\n"
+        "\n"
         "def _fix_switch_path(p):\n"
-        "    # В Python 2 нужно проверять basestring, чтобы поймать и str, и unicode\n"
         "    if isinstance(p, basestring) and 'save://' in p:\n"
-        "        return p.replace('save://', 'save:/')\n"
+        "        if SAVE_MOUNTED:\n"
+        "            return p.replace('save://', 'save:/')\n"
+        "        else:\n"
+        "            p = p.replace('save://', 'sdmc:/switch-renpy-saves/')\n"
+        "            p = p.replace('save:/', 'sdmc:/switch-renpy-saves/')\n"
+        "            p = p.replace('save:', 'sdmc:/switch-renpy-saves/')\n"
+        "            d = os.path.dirname(p)\n"
+        "            if not os.path.isdir(d):\n"
+        "                try: os.makedirs(d)\n"
+        "                except OSError: pass\n"
+        "            return p\n"
         "    return p\n"
         "\n"
-        "_orig_mkdir = os.mkdir\n"
-        "def _switch_mkdir(path, mode=0777):\n"
-        "    path = _fix_switch_path(path)\n"
-        "    try:\n"
-        "        _orig_mkdir(path, mode)\n"
-        "    except OSError as e:\n"
-        "        if e.errno in (errno.ENOSYS, errno.EEXIST):\n"
-        "            pass\n"
-        "        else:\n"
-        "            raise\n"
-        "os.mkdir = _switch_mkdir\n"
-        "\n"
-        "_orig_makedirs = os.makedirs\n"
-        "def _switch_makedirs(name, mode=0777):\n"
-        "    name = _fix_switch_path(name)\n"
-        "    try:\n"
-        "        _orig_makedirs(name, mode)\n"
-        "    except OSError as e:\n"
-        "        if e.errno in (errno.ENOSYS, errno.EEXIST):\n"
-        "            pass\n"
-        "        else:\n"
-        "            raise\n"
-        "os.makedirs = _switch_makedirs\n"
-        "\n"
-        "# Патчим встроенную open()\n"
         "_orig_builtin_open = __builtin__.open\n"
         "def _switch_builtin_open(name, mode='r', buffering=-1):\n"
         "    name = _fix_switch_path(name)\n"
-        "    if isinstance(name, basestring) and name.startswith('save:') and ('w' in mode or 'a' in mode):\n"
-        "        d = os.path.dirname(name)\n"
-        "        if not os.path.isdir(d):\n"
-        "            try: os.makedirs(d)\n"
-        "            except OSError: pass\n"
         "    return _orig_builtin_open(name, mode, buffering)\n"
         "__builtin__.open = _switch_builtin_open\n"
         "\n"
-        "# Патчим io.open(), которую Ren'Py использует для логов\n"
         "_orig_io_open = io.open\n"
         "def _switch_io_open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True):\n"
         "    file = _fix_switch_path(file)\n"
-        "    if isinstance(file, basestring) and file.startswith('save:') and ('w' in mode or 'a' in mode):\n"
-        "        d = os.path.dirname(file)\n"
-        "        if not os.path.isdir(d):\n"
-        "            try: os.makedirs(d)\n"
-        "            except OSError: pass\n"
         "    return _orig_io_open(file, mode, buffering, encoding, errors, newline, closefd)\n"
         "io.open = _switch_io_open\n"
     );
