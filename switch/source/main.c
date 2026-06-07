@@ -422,69 +422,11 @@ int main(int argc, char* argv[])
 
     int python_result;
 
-    // Устанавливаем путь и патчим os.open, io.open, os.mkdir / os.makedirs
-    python_result = PyRun_SimpleString(
-        "import sys; sys.path = ['romfs:/Contents/lib.zip']\n"
-        "import os, errno, io, __builtin__\n"
-        "\n"
-        "def _fix_switch_path(p):\n"
-        "    # В Python 2 нужно проверять basestring, чтобы поймать и str, и unicode\n"
-        "    if isinstance(p, basestring) and 'save://' in p:\n"
-        "        return p.replace('save://', 'save:/')\n"
-        "    return p\n"
-        "\n"
-        "_orig_mkdir = os.mkdir\n"
-        "def _switch_mkdir(path, mode=0777):\n"
-        "    path = _fix_switch_path(path)\n"
-        "    try:\n"
-        "        _orig_mkdir(path, mode)\n"
-        "    except OSError as e:\n"
-        "        if e.errno in (errno.ENOSYS, errno.EEXIST):\n"
-        "            pass\n"
-        "        else:\n"
-        "            raise\n"
-        "os.mkdir = _switch_mkdir\n"
-        "\n"
-        "_orig_makedirs = os.makedirs\n"
-        "def _switch_makedirs(name, mode=0777):\n"
-        "    name = _fix_switch_path(name)\n"
-        "    try:\n"
-        "        _orig_makedirs(name, mode)\n"
-        "    except OSError as e:\n"
-        "        if e.errno in (errno.ENOSYS, errno.EEXIST):\n"
-        "            pass\n"
-        "        else:\n"
-        "            raise\n"
-        "os.makedirs = _switch_makedirs\n"
-        "\n"
-        "# Патчим встроенную open()\n"
-        "_orig_builtin_open = __builtin__.open\n"
-        "def _switch_builtin_open(name, mode='r', buffering=-1):\n"
-        "    name = _fix_switch_path(name)\n"
-        "    if isinstance(name, basestring) and name.startswith('save:') and ('w' in mode or 'a' in mode):\n"
-        "        d = os.path.dirname(name)\n"
-        "        if not os.path.isdir(d):\n"
-        "            try: os.makedirs(d)\n"
-        "            except OSError: pass\n"
-        "    return _orig_builtin_open(name, mode, buffering)\n"
-        "__builtin__.open = _switch_builtin_open\n"
-        "\n"
-        "# Патчим io.open(), которую Ren'Py использует для логов\n"
-        "_orig_io_open = io.open\n"
-        "def _switch_io_open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True):\n"
-        "    file = _fix_switch_path(file)\n"
-        "    if isinstance(file, basestring) and file.startswith('save:') and ('w' in mode or 'a' in mode):\n"
-        "        d = os.path.dirname(file)\n"
-        "        if not os.path.isdir(d):\n"
-        "            try: os.makedirs(d)\n"
-        "            except OSError: pass\n"
-        "    return _orig_io_open(file, mode, buffering, encoding, errors, newline, closefd)\n"
-        "io.open = _switch_io_open\n"
-    );
+    python_result = PyRun_SimpleString("import sys; sys.path = ['romfs:/Contents/lib.zip']");
 
     if (python_result == -1)
     {
-        show_error("Could not set the Python path or patch os module.\n\nThis is an internal error and should not occur during normal usage.", 1);
+        show_error("Could not set the Python path.\n\nThis is an internal error and should not occur during normal usage.", 1);
     }
 
 #define x(lib) \
